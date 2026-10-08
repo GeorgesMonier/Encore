@@ -26,12 +26,11 @@ export default function AuthDialog({ onClose, onLogin }) {
     setMessage('');
     try {
       if (mode === 'register') {
-        await api('/auth/register', {
+        const session = await api('/auth/register', {
           method: 'POST',
           body: JSON.stringify({ name, email, password }),
         });
-        setMode('login');
-        setMessage('Cuenta creada. Revisa tu correo para verificarla y después inicia sesión.');
+        onLogin(session);
         return;
       }
 

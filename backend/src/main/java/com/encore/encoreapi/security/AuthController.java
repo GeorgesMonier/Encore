@@ -36,16 +36,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
-        User user = userService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(
-                new UserResponse(user.getId(), user.getEmail(), user.getName())
-        );
-    }
-
-    @GetMapping("/verify")
-    public ResponseEntity<?> verify(@RequestParam String token) {
-        userService.verifyUser(token);
-        return ResponseEntity.ok("Cuenta verificada correctamente. Ya puedes iniciar sesión.");
+        return authenticatedResponse(userService.register(request), HttpStatus.CREATED);
     }
 
     @PostMapping("/login")
@@ -54,7 +45,7 @@ public class AuthController {
         if (response.isRequiresTotp()) {
             return ResponseEntity.ok(Map.of("requiresTotp", true));
         }
-        return authenticatedResponse(response);
+        return authenticatedResponse(response, HttpStatus.OK);
     }
 
     @GetMapping("/me")
@@ -95,7 +86,7 @@ public class AuthController {
     @PostMapping("/login/totp")
     public ResponseEntity<?> loginWithTotp(@RequestParam String code, @Valid @RequestBody LoginRequest request) {
         LoginResponse response = userService.loginWithTotp(request, code);
-        return authenticatedResponse(response);
+        return authenticatedResponse(response, HttpStatus.OK);
     }
 
     @GetMapping("/csrf")
@@ -109,9 +100,9 @@ public class AuthController {
         return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookie.toString()).build();
     }
 
-    private ResponseEntity<Map<String, Object>> authenticatedResponse(LoginResponse response) {
+    private ResponseEntity<Map<String, Object>> authenticatedResponse(LoginResponse response, HttpStatus status) {
         ResponseCookie cookie = sessionCookie(response.getToken(), jwtService.getExpiration().toSeconds());
-        return ResponseEntity.ok()
+        return ResponseEntity.status(status)
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(Map.of(
                         "email", response.getEmail(),

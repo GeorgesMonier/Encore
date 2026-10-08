@@ -4,7 +4,7 @@ Backend de una plataforma de venta de entradas para conciertos, construido con S
 
 ## Características
 
-- **Autenticación**: registro con verificación de email, sesiones JWT en cookies HttpOnly y Secure en producción, CORS restringido y protección CSRF
+- **Autenticación**: registro e inicio de sesión inmediatos sin verificación por email, sesiones JWT en cookies HttpOnly y Secure en producción, CORS restringido y protección CSRF
 - **Seguridad**: verificación en dos pasos (TOTP/Google Authenticator), rate limiting contra fuerza bruta
 - **Eventos**: catálogo de conciertos sincronizado desde la Ticketmaster Discovery API
 - **Compra de entradas**: reserva de stock con bloqueo optimista, expiración de reservas pendientes a los 15 minutos y entradas de demostración
@@ -33,14 +33,14 @@ El proyecto sigue una organización por responsabilidad (no por capas técnicas)
 - `payment` — Stripe, PaymentIntents, webhook
 - `support` — RAG (vector store + chat)
 - `admin` — endpoints de administración
-- `email`, `config` — utilidades transversales
+- `config` — utilidades transversales
 
 ## Cómo levantarlo
 
 ### Requisitos
 - Docker y Docker Compose
 - Java 21 o superior para desarrollo local
-- Claves de: Mailtrap (o SMTP propio), Ticketmaster Discovery API y Google AI Studio (Gemini). Stripe solo hace falta si se desactiva el modo demo.
+- Claves de: Ticketmaster Discovery API y Google AI Studio (Gemini). Stripe solo hace falta si se desactiva el modo demo.
 
 ### Variables de entorno
 
@@ -48,7 +48,6 @@ Copia `.env.example` a `.env` y rellena los valores:
 
 ```
 DB_PASSWORD=
-MAIL_PASSWORD=
 TICKETMASTER_API_KEY=
 STRIPE_API_KEY=
 STRIPE_WEBHOOK_SECRET=
@@ -59,14 +58,11 @@ AUTH_COOKIE_SECURE=false
 AUTH_COOKIE_SAME_SITE=Lax
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 DB_USER=encore_user
-MAIL_HOST=live.smtp.mailtrap.io
-MAIL_PORT=587
-MAIL_USERNAME=api
-MAIL_FROM=
-AUTH_VERIFICATION_URL=http://localhost:8080/api/auth/verify
 ```
 
 `AUTH_COOKIE_SECURE=false` solo es para desarrollo local por HTTP. En Render configura `AUTH_COOKIE_SECURE=true`, `CORS_ALLOWED_ORIGINS=https://encore-xpi2.onrender.com` (solo el origen del frontend, sin ruta final ni `/api`) y `AUTH_COOKIE_SAME_SITE=Lax`. Ambos servicios usan HTTPS bajo `onrender.com` y son del mismo sitio, aunque tengan subdominios distintos. El frontend debe usar `VITE_API_BASE_URL=https://encore-de5y.onrender.com/api`; ese `/api` forma parte de las rutas del backend. CORS permite cookies solo para los orígenes explícitos configurados; no uses `*`.
+
+El registro crea la cuenta y devuelve la sesión autenticada en la cookie HttpOnly inmediatamente. No se envían correos ni se requiere verificación: cualquier correo se acepta como identificador de acceso, así que la gestión o verificación de emails puede añadirse desde Supabase por separado si se cambia este flujo.
 
 `PAYMENTS_DEMO_MODE=true` es el valor seguro por defecto: permite confirmar compras de muestra y nunca crea PaymentIntents ni cargos. En ese modo se añaden tipos de entrada de demostración (45 € general y 90 € VIP, con inventario ficticio) a los eventos, pero el catálogo ya no inventa conciertos. Para traer conciertos, configura `TICKETMASTER_API_KEY`, `TICKETMASTER_SYNC_ENABLED=true` y `TICKETMASTER_SYNC_CITIES` con nombres separados por comas. Cuando el servidor ya está disponible, la sincronización se ejecuta en segundo plano y consulta todas las páginas disponibles (hasta 200 eventos por página) para cada ciudad; la sincronización manual `POST /api/events/sync` sigue disponible para administradores. Ticketmaster limita los resultados y las llamadas según su API y cuota, así que “todos” significa los resultados que devuelve la búsqueda para esas ciudades, no todos los conciertos mundiales. Las compras quedan como `DEMO`, no cuentan como ventas pagadas ni como ingresos y se muestran claramente como demostración. Para activar Stripe, establece `PAYMENTS_DEMO_MODE=false` y configura claves Stripe de prueba; no uses claves live para una demo de portfolio.
 
@@ -78,7 +74,7 @@ Este repositorio no incluye `render.yaml`: los servicios, el dominio, la base de
 
 1. En Supabase crea un proyecto, habilita la extensión `vector` desde Database → Extensions y copia los datos de conexión PostgreSQL SSL. Para Render, usa una cadena JDBC con el host/puerto/tipo de conexión indicados por Supabase, por ejemplo `jdbc:postgresql://<host>:5432/postgres?sslmode=require`; configura `SPRING_DATASOURCE_URL`, `DB_USER` y `DB_PASSWORD` como variables privadas en Render. Si usas el pooler, utiliza el usuario/puerto de pooler que muestra Supabase.
 2. En Render crea un **Web Service** desde el repositorio, runtime Docker y **Health Check Path** `/api/events/cities`. Deja **Root Directory** vacío si usas el repositorio actual `Encore-APIs`; si publicas la aplicación como un único repo con las carpetas `frontend` y `encore-api`, establece **Root Directory** en `encore-api`. Configura `PORT=8080`; `server.port` también acepta la variable `PORT`.
-3. En el Web Service configura `SPRING_DATASOURCE_URL`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `TICKETMASTER_API_KEY`, `TICKETMASTER_SYNC_ENABLED=true`, `TICKETMASTER_SYNC_CITIES=Madrid,Barcelona,Valencia,Sevilla,Bilbao,Zaragoza,Málaga,Alicante,Granada`, `GEMINI_API_KEY`, `MAIL_PASSWORD`, `MAIL_FROM`, `AUTH_VERIFICATION_URL`, `CORS_ALLOWED_ORIGINS=https://encore-xpi2.onrender.com`, `AUTH_COOKIE_SECURE=true`, `AUTH_COOKIE_SAME_SITE=Lax` y `PAYMENTS_DEMO_MODE=true`. La sincronización se inicia en segundo plano después de que el servidor abre el puerto, y amplía el catálogo con las ciudades indicadas. `JWT_SECRET` debe contener al menos 32 bytes aleatorios. Configura también `MAIL_HOST`, `MAIL_PORT` y `MAIL_USERNAME` según el SMTP que utilices. La app requiere Mailtrap/SMTP, Ticketmaster y Gemini para iniciar con la configuración actual; no inventes credenciales. `AUTH_VERIFICATION_URL` debe usar la URL pública HTTPS de la API, por ejemplo `https://<api>.onrender.com/api/auth/verify`; `MAIL_FROM` debe ser una dirección aceptada por el proveedor SMTP.
+3. En el Web Service configura `SPRING_DATASOURCE_URL`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `TICKETMASTER_API_KEY`, `TICKETMASTER_SYNC_ENABLED=true`, `TICKETMASTER_SYNC_CITIES=Madrid,Barcelona,Valencia,Sevilla,Bilbao,Zaragoza,Málaga,Alicante,Granada`, `GEMINI_API_KEY`, `CORS_ALLOWED_ORIGINS=https://encore-xpi2.onrender.com`, `AUTH_COOKIE_SECURE=true`, `AUTH_COOKIE_SAME_SITE=Lax` y `PAYMENTS_DEMO_MODE=true`. La sincronización se inicia en segundo plano después de que el servidor abre el puerto, y amplía el catálogo con las ciudades indicadas. `JWT_SECRET` debe contener al menos 32 bytes aleatorios. No se necesitan variables SMTP ni de verificación de correo.
 4. Para la web, crea un **Static Site** desde un repositorio que incluya el frontend. En un repositorio único con ambas carpetas, establece **Root Directory** `frontend`; en un repositorio independiente solo del frontend, déjalo vacío. Usa **Build Command** `npm ci && npm run build` y **Publish Directory** `dist`. Define `VITE_API_BASE_URL=https://encore-de5y.onrender.com/api` y, opcionalmente, `VITE_SITE_URL=https://encore-xpi2.onrender.com`. Añade una regla Rewrite de `/*` a `/index.html` con estado `200` para la navegación SPA. En la API, configura `CORS_ALLOWED_ORIGINS=https://encore-xpi2.onrender.com`: solo el origen del Static Site, sin ruta final ni ruta `/api`.
 5. Con los dominios HTTPS `*.onrender.com` de la web y API, usa `AUTH_COOKIE_SAME_SITE=Lax` y `AUTH_COOKIE_SECURE=true`. Si configuras dominios propios bajo sitios registrables diferentes, puede ser necesario `AUTH_COOKIE_SAME_SITE=None`; en ese caso hace falta HTTPS y validar el soporte de cookies de terceros. Un dominio propio compartido (por ejemplo `www.ejemplo.com` y `api.ejemplo.com`) es preferible.
 6. Con `PAYMENTS_DEMO_MODE=true` no hay que configurar Stripe: los pedidos de muestra no crean cargos. Comprueba `/api/payments/mode` y verifica que responde `{"demoMode":true}`.
@@ -124,8 +120,7 @@ La API queda disponible en `http://localhost:8080`.
 
 | Método | Ruta | Descripción | Acceso |
 |---|---|---|---|
-| POST | `/api/auth/register` | Registro de usuario | Público + CSRF |
-| GET | `/api/auth/verify` | Verificación de email | Público |
+| POST | `/api/auth/register` | Registro e inicio de sesión inmediatos; establece cookie HttpOnly | Público + CSRF |
 | POST | `/api/auth/login` | Login; establece cookie de sesión HttpOnly | Público + CSRF |
 | POST | `/api/auth/logout` | Cerrar sesión y borrar la cookie | CSRF |
 | GET | `/api/auth/csrf` | Obtener token CSRF para el navegador | Público |

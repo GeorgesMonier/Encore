@@ -1,6 +1,5 @@
 package com.encore.encoreapi.user;
 
-import com.encore.encoreapi.email.EmailService;
 import com.encore.encoreapi.security.JwtService;
 import com.encore.encoreapi.security.TotpService;
 import com.encore.encoreapi.security.TotpSetupResponse;
@@ -9,38 +8,31 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
 public class UserService {
 
     private final UserRepository userRepository;
-    private final VerificationTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
     private final JwtService jwtService;
     private final TotpService totpService;
     private final LoginAttemptService loginAttemptService;
 
     public UserService(UserRepository userRepository,
-                       VerificationTokenRepository tokenRepository,
                        PasswordEncoder passwordEncoder,
-                       EmailService emailService,
                        JwtService jwtService,
                        TotpService totpService,
                        LoginAttemptService loginAttemptService) {
         this.userRepository = userRepository;
-        this.tokenRepository = tokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.emailService = emailService;
         this.jwtService = jwtService;
         this.totpService = totpService;
         this.loginAttemptService = loginAttemptService;
     }
 
     @Transactional
-    public User register(RegisterRequest request) {
+    public LoginResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Ya existe una cuenta con este email");
         }
@@ -50,34 +42,10 @@ public class UserService {
                 passwordEncoder.encode(request.getPassword()),
                 request.getName()
         );
-        userRepository.save(user);
-
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = new VerificationToken(
-                token,
-                user,
-                LocalDateTime.now().plusHours(24)
-        );
-        tokenRepository.save(verificationToken);
-
-        emailService.sendVerificationEmail(user.getEmail(), token);
-
-        return user;
-    }
-
-    public void verifyUser(String token) {
-        VerificationToken verificationToken = tokenRepository.findByToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("Token inválido"));
-
-        if (verificationToken.isExpired()) {
-            throw new IllegalArgumentException("El token ha expirado");
-        }
-
-        User user = verificationToken.getUser();
         user.setEnabled(true);
-        userRepository.save(user);
-
-        tokenRepository.delete(verificationToken);
+        User savedUser = userRepository.save(user);
+        String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail(), savedUser.getRole().name());
+        return new LoginResponse(token, savedUser.getEmail(), savedUser.getName());
     }
 
     public LoginResponse login(LoginRequest request) {
@@ -94,7 +62,8 @@ public class UserService {
         }
 
         if (!user.isEnabled()) {
-            throw new IllegalArgumentException("Debes verificar tu correo antes de iniciar sesión");
+            user.setEnabled(true);
+            userRepository.save(user);
         }
 
         loginAttemptService.loginSucceeded(request.getEmail());

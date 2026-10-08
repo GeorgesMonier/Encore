@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.mail.MailException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -41,13 +40,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<ErrorResponse> handleConflict(ObjectOptimisticLockingFailureException ex) {
         return build(HttpStatus.CONFLICT, "El recurso fue modificado por otra petición. Inténtalo de nuevo.");
-    }
-
-    @ExceptionHandler(MailException.class)
-    public ResponseEntity<ErrorResponse> handleMailFailure(MailException ex) {
-        log.error("No se pudo enviar un correo de la aplicación", ex);
-        return build(HttpStatus.SERVICE_UNAVAILABLE,
-                "No se pudo enviar el correo de verificación. Comprueba la configuración de correo e inténtalo de nuevo.");
     }
 
     @ExceptionHandler(Exception.class)

@@ -4,6 +4,7 @@ import com.encore.encoreapi.security.AuthController;
 import com.encore.encoreapi.security.JwtService;
 import com.encore.encoreapi.user.LoginRequest;
 import com.encore.encoreapi.user.LoginResponse;
+import com.encore.encoreapi.user.RegisterRequest;
 import com.encore.encoreapi.user.UserRepository;
 import com.encore.encoreapi.user.UserService;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,24 @@ class AuthControllerTest {
     @Mock private UserService userService;
     @Mock private UserRepository userRepository;
     @Mock private JwtService jwtService;
+
+    @Test
+    void registerImmediatelySetsAuthenticatedCookie() {
+        when(userService.register(org.mockito.ArgumentMatchers.any(RegisterRequest.class)))
+                .thenReturn(new LoginResponse("secret-access-token", "buyer@example.test", "Buyer"));
+        when(jwtService.getExpiration()).thenReturn(Duration.ofHours(24));
+
+        AuthController controller = new AuthController(userService, userRepository, jwtService, true, "Lax");
+        ResponseEntity<?> response = controller.register(new RegisterRequest());
+        String cookie = response.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
+
+        assertEquals(201, response.getStatusCode().value());
+        assertNotNull(cookie);
+        assertTrue(cookie.contains("HttpOnly"));
+        assertTrue(cookie.contains("Secure"));
+        assertTrue(cookie.contains("SameSite=Lax"));
+        assertFalse(response.getBody().toString().contains("secret-access-token"));
+    }
 
     @Test
     void loginSetsHttpOnlyCookieAndDoesNotReturnTheToken() {
