@@ -28,6 +28,7 @@ public class TicketmasterClient {
         int totalPages;
 
         do {
+            int requestedPage = page;
             TicketmasterSearchResponse response = restClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/events.json")
@@ -36,7 +37,7 @@ public class TicketmasterClient {
                             .queryParam("countryCode", countryCode)
                             .queryParam("classificationName", "music")
                             .queryParam("size", PAGE_SIZE)
-                            .queryParam("page", page)
+                            .queryParam("page", requestedPage)
                             .build())
                     .retrieve()
                     .body(TicketmasterSearchResponse.class);
