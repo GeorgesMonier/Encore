@@ -14,13 +14,19 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
 
     boolean existsByExternalId(String externalId);
 
-    @Query(value = "select distinct city from events where city is not null and btrim(city) <> '' order by city asc",
+    @Query(value = """
+            select distinct city from events
+            where external_id not like 'encore-demo-live-%'
+              and city is not null and btrim(city) <> ''
+            order by city asc
+            """,
             nativeQuery = true)
     List<String> findDistinctCities();
 
     @Query(value = """
             select e.* from events e
-            where (cast(:city as text) is null or lower(coalesce(e.city, '')) = lower(cast(:city as text)))
+            where e.external_id not like 'encore-demo-live-%'
+              and (cast(:city as text) is null or lower(coalesce(e.city, '')) = lower(cast(:city as text)))
               and (
                 cast(:search as text) is null
                 or lower(e.name) like concat('%', lower(cast(:search as text)), '%')

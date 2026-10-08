@@ -4,12 +4,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class TicketmasterClient {
 
+    private static final int PAGE_SIZE = 200;
     private final RestClient restClient;
 
     @Value("${ticketmaster.api.key}")
@@ -22,22 +23,36 @@ public class TicketmasterClient {
     }
 
     public List<TicketmasterEventDto> searchEvents(String city, String countryCode) {
-        TicketmasterSearchResponse response = restClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/events.json")
-                        .queryParam("apikey", apiKey)
-                        .queryParam("city", city)
-                        .queryParam("countryCode", countryCode)
-                        .queryParam("classificationName", "music")
-                        .queryParam("size", "20")
-                        .build())
-                .retrieve()
-                .body(TicketmasterSearchResponse.class);
+        List<TicketmasterEventDto> events = new ArrayList<>();
+        int page = 0;
+        int totalPages;
 
-        if (response == null || response.get_embedded() == null) {
-            return Collections.emptyList();
-        }
+        do {
+            TicketmasterSearchResponse response = restClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/events.json")
+                            .queryParam("apikey", apiKey)
+                            .queryParam("city", city)
+                            .queryParam("countryCode", countryCode)
+                            .queryParam("classificationName", "music")
+                            .queryParam("size", PAGE_SIZE)
+                            .queryParam("page", page)
+                            .build())
+                    .retrieve()
+                    .body(TicketmasterSearchResponse.class);
 
-        return response.get_embedded().getEvents();
+            if (response == null) {
+                break;
+            }
+            if (response.get_embedded() != null && response.get_embedded().getEvents() != null) {
+                events.addAll(response.get_embedded().getEvents());
+            }
+
+            totalPages = response.getPage() != null && response.getPage().getTotalPages() != null
+                    ? response.getPage().getTotalPages() : page + 1;
+            page++;
+        } while (page < totalPages);
+
+        return events;
     }
 }

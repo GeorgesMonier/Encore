@@ -13,10 +13,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.DefaultApplicationArguments;
 
 import java.util.List;
-import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,7 +26,6 @@ class DemoTicketSeederTest {
     @Test
     void createsClearlyNamedSampleInventoryOnlyInDemoMode() {
         Event event = new Event("event-1", "Concert", null, null, null, null, null, null);
-        when(eventRepository.count()).thenReturn(1L);
         when(eventRepository.findAll()).thenReturn(List.of(event));
         when(ticketTypeRepository.findByEventId(null)).thenReturn(List.of());
 
@@ -42,23 +39,15 @@ class DemoTicketSeederTest {
     }
 
     @Test
-    void seedsSampleEventsAndInventoryWhenDemoDatabaseIsEmpty() {
-        List<Event> persistedEvents = new ArrayList<>();
-        when(eventRepository.count()).thenReturn(0L);
-        when(eventRepository.findAll()).thenAnswer(invocation -> persistedEvents);
-        when(eventRepository.saveAll(org.mockito.ArgumentMatchers.<Iterable<Event>>any()))
-                .thenAnswer(invocation -> {
-                    Iterable<Event> events = invocation.getArgument(0);
-                    events.forEach(persistedEvents::add);
-                    return persistedEvents;
-                });
+    void doesNotCreateFictitiousEventsWhenCatalogIsEmpty() {
+        when(eventRepository.findAll()).thenReturn(List.of());
         when(ticketTypeRepository.findByEventId(null)).thenReturn(List.of());
 
         DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, true);
         seeder.run(new DefaultApplicationArguments(new String[0]));
 
-        assertEquals(3, persistedEvents.size());
-        verify(ticketTypeRepository, times(6)).save(any(TicketType.class));
+        verify(eventRepository, never()).saveAll(any());
+        verifyNoInteractions(ticketTypeRepository);
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.encore.encoreapi.user;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -12,6 +14,8 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     public record ErrorResponse(int status, String error, String message, LocalDateTime timestamp) {}
 
@@ -39,6 +43,7 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
+        log.error("Error inesperado procesando una petición API", ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado.");
     }
 }

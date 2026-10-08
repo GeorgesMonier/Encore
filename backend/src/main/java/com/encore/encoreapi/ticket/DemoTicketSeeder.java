@@ -9,8 +9,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.List;
 
 @Component
 public class DemoTicketSeeder implements ApplicationRunner {
@@ -32,9 +30,6 @@ public class DemoTicketSeeder implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         if (!demoMode) return;
 
-        if (eventRepository.count() == 0) {
-            seedSampleEvents();
-        }
         eventRepository.findAll().forEach(this::ensureDemoTickets);
     }
 
@@ -43,20 +38,5 @@ public class DemoTicketSeeder implements ApplicationRunner {
         if (!demoMode || !ticketTypeRepository.findByEventId(event.getId()).isEmpty()) return;
         ticketTypeRepository.save(new TicketType(event, "General (demo)", new BigDecimal("45.00"), 50));
         ticketTypeRepository.save(new TicketType(event, "VIP (demo)", new BigDecimal("90.00"), 10));
-    }
-
-    private void seedSampleEvents() {
-        LocalDateTime now = LocalDateTime.now();
-        eventRepository.saveAll(List.of(
-                new Event("encore-demo-live-1", "Encore Demo Live: Noche Eléctrica", "The Demo Waves",
-                        "Sala Demo Encore", "Barcelona", now.plusDays(30), null,
-                        "Evento ficticio de portfolio. Los precios y el inventario son de demostración."),
-                new Event("encore-demo-live-2", "Encore Demo Live: Sesión Acústica", "Luna de Prueba",
-                        "Auditorio Demo", "Madrid", now.plusDays(45), null,
-                        "Evento ficticio de portfolio. No se realizan cargos reales."),
-                new Event("encore-demo-live-3", "Encore Demo Live: Festival Urbano", "Banda Ficticia",
-                        "Parque Demo", "Valencia", now.plusDays(60), null,
-                        "Evento ficticio de portfolio. No se realizan cargos reales.")
-        ));
     }
 }

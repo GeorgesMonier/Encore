@@ -1,14 +1,17 @@
 package com.encore.encoreapi.event;
 
+import com.encore.encoreapi.ticket.DemoTicketSeeder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import com.encore.encoreapi.ticket.DemoTicketSeeder;
 
 @Service
 public class EventSyncService {
 
+    private static final Logger log = LoggerFactory.getLogger(EventSyncService.class);
     private final TicketmasterClient ticketmasterClient;
     private final EventRepository eventRepository;
     private final DemoTicketSeeder demoTicketSeeder;
@@ -22,7 +25,7 @@ public class EventSyncService {
 
     public int syncEvents(String city, String countryCode) {
         List<TicketmasterEventDto> events = ticketmasterClient.searchEvents(city, countryCode);
-        System.out.println("Eventos recibidos de Ticketmaster: " + events.size());
+        log.info("Ticketmaster devolvió {} eventos para {}", events.size(), city);
         int savedCount = 0;
 
         for (TicketmasterEventDto dto : events) {
