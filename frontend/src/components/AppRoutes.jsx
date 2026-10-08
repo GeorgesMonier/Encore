@@ -9,22 +9,24 @@ import TermsPage from './TermsPage.jsx';
 import useAnalyticsConsent from '../hooks/useAnalyticsConsent.js';
 import useDocumentMetadata from '../hooks/useDocumentMetadata.js';
 
-function restoreStaticRoute() {
+function getInitialPathname() {
   try {
     const requestedPath = window.sessionStorage.getItem('encore_static_route');
-    if (!requestedPath) return;
-
-    window.sessionStorage.removeItem('encore_static_route');
-    if (requestedPath.startsWith('/') && !requestedPath.startsWith('//')) {
-      window.history.replaceState(null, '', requestedPath);
+    if (requestedPath) {
+      window.sessionStorage.removeItem('encore_static_route');
+      if (requestedPath.startsWith('/') && !requestedPath.startsWith('//')) {
+        window.history.replaceState(null, '', requestedPath);
+      }
     }
   } catch (error) {
     console.warn('No se pudo restaurar la ruta solicitada.', error);
   }
+  return window.location.pathname.replace(/\/+$/, '') || '/';
 }
 
 export default function AppRoutes() {
   const [cookieSettingsOpen, setCookieSettingsOpen] = useState(false);
+  const [pathname, setPathname] = useState(getInitialPathname);
   const [theme, setTheme] = useState(() => {
     try {
       return window.localStorage.getItem('encore_theme') === 'dark' ? 'dark' : 'light';
@@ -33,8 +35,6 @@ export default function AppRoutes() {
       return 'light';
     }
   });
-  restoreStaticRoute();
-  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const isPrivacyPage = pathname === '/privacidad';
   const isTermsPage = pathname === '/terminos';
   const isProfilePage = pathname === '/perfil';
@@ -43,6 +43,32 @@ export default function AppRoutes() {
 
   useDocumentMetadata(page);
   const { consent, error: consentError, acceptAll, rejectOptional, saveSettings } = useAnalyticsConsent();
+
+  useEffect(() => {
+    const handleClick = (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+      if (!anchor || anchor.target || anchor.hasAttribute('download')) return;
+
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+
+      event.preventDefault();
+      window.history.pushState(null, '', destination);
+      setPathname(destination.pathname.replace(/\/+$/, '') || '/');
+    };
+    const handlePopState = () => setPathname(window.location.pathname.replace(/\/+$/, '') || '/');
+
+    document.addEventListener('click', handleClick);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      document.removeEventListener('click', handleClick);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
