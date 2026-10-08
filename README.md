@@ -1,33 +1,140 @@
 # Encore
 
-Plataforma web de descubrimiento y venta de entradas para conciertos, construida con React y Spring Boot. Incluye catálogo de eventos, cuentas de usuario, reservas de entradas, modo de compra demo sin cargos, integración opcional con Stripe y un asistente de soporte con IA.
+Plataforma web de descubrimiento y venta de entradas para conciertos, construida con **React** y **Spring Boot**. Incluye catálogo de eventos, cuentas de usuario, reservas de entradas, modo de compra demo sin cargos, integración opcional con Stripe y un asistente de soporte con IA.
 
 ## Stack
 
-- Frontend: React, Vite y Stripe Elements.
-- Backend: Java 21, Spring Boot, Spring Security y JWT en cookies HttpOnly.
-- Persistencia: PostgreSQL; Supabase es una opción de alojamiento.
-- Integraciones opcionales: Ticketmaster, Google Gemini y Stripe.
+| Capa | Tecnologías |
+|---|---|
+| **Frontend** | React, Vite y Stripe Elements |
+| **Backend** | Java 21, Spring Boot, Spring Security y JWT mediante cookies HttpOnly |
+| **Persistencia** | PostgreSQL, alojado opcionalmente mediante Supabase |
+| **Integraciones opcionales** | Ticketmaster, Google Gemini y Stripe |
+
+## Estructura del proyecto
+
+```text
+Encore/
+├── backend/       # API REST con Spring Boot
+├── frontend/      # Aplicación React + Vite
+├── README.md
+└── .gitignore
+```
 
 ## Ejecutar localmente
 
-Consulta [instrucciones del backend](./encore-api/README.md) para configurar PostgreSQL, las variables de entorno y Docker Compose. Luego ejecuta el frontend desde `frontend` con `npm install` y `npm run dev`.
+### Backend
 
-El modo de compra demo está activado por defecto. Genera órdenes y entradas de demostración sin crear PaymentIntents ni cobrar dinero. Para una demostración de portfolio, deja `PAYMENTS_DEMO_MODE=true`; las órdenes se marcan como demo y no como ventas pagadas.
+Consulta [`backend/README.md`](backend/README.md) para configurar PostgreSQL, las variables de entorno y Docker Compose.
+
+Desde `backend` puedes ejecutar:
+
+```bash
+./mvnw spring-boot:run
+```
+
+En Windows:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+### Frontend
+
+Desde `frontend`:
+
+```bash
+npm install
+npm run dev
+```
+
+El frontend se ejecutará mediante Vite y se conectará a la API configurada mediante sus variables de entorno.
+
+## Modo de compra demo
+
+El modo de compra demo está **activado por defecto**.
+
+Cuando `PAYMENTS_DEMO_MODE=true`, las compras generan órdenes y entradas de demostración sin crear `PaymentIntent` ni realizar cargos reales.
+
+Para una demostración de portfolio se recomienda mantener:
+
+```env
+PAYMENTS_DEMO_MODE=true
+```
+
+Las órdenes realizadas en este modo se identifican como operaciones demo y no como pagos reales.
 
 ## Despliegue
 
-Hay una guía de configuración manual de Render + Supabase, variables requeridas, dominios, cookies y webhook Stripe en [README del backend](./encore-api/README.md#despliegue-manual-en-render--supabase). No se incluye `render.yaml` ni se han creado servicios de hosting; configurar esos servicios y validar un despliegue real sigue siendo un paso manual.
+El proyecto está preparado para desplegar el frontend y el backend desde el mismo repositorio.
 
-**Importante sobre el checkout actual:** la raíz Git conectada al remoto `Encore-APIs` es `encore-api`; `frontend` y este README están fuera de ese repositorio. La API puede desplegarse desde la raíz del repo existente, pero Render no podrá construir el frontend desde ese repo hasta que publiques el frontend en su propio repositorio o consolides ambos directorios en un repositorio común. El `.gitignore` dentro de `encore-api` protege los secretos de ese repositorio; el `.gitignore` de la raíz y `frontend/.gitignore` solo aplican al integrar/publicar esos directorios bajo sus respectivos repositorios.
+### Arquitectura de producción
 
-Si habilitas Stripe, registra `https://<api>.onrender.com/api/payments/webhook` como webhook, selecciona `payment_intent.succeeded` y configura el secreto `whsec_...` únicamente en el backend. En modo demo no se necesita webhook ni una cuenta de Stripe configurada.
+```text
+                    GitHub
+                       │
+                  Encore repository
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+          ▼                         ▼
+   Render Backend            Render Frontend
+   Spring Boot               React + Vite
+          │
+          ▼
+       Supabase
+      PostgreSQL
+```
+
+### Backend
+
+El backend se encuentra en `backend/`.
+
+En Render debe configurarse este directorio como **Root Directory** del servicio del backend.
+
+La configuración de build, ejecución y variables de entorno está documentada en [`backend/README.md`](backend/README.md).
+
+### Frontend
+
+El frontend se encuentra en `frontend/`.
+
+En Render debe configurarse este directorio como **Root Directory** del servicio del frontend.
+
+El frontend debe configurarse para utilizar la URL pública del backend desplegado en Render.
+
+### Supabase
+
+Supabase puede utilizarse como proveedor de PostgreSQL para el backend.
+
+Las credenciales y variables de conexión deben configurarse como variables de entorno en Render y **no deben almacenarse en Git**.
+
+### Stripe
+
+Stripe es **opcional**.
+
+Si se habilitan los pagos reales, registra el webhook:
+
+```text
+https://<api>.onrender.com/api/payments/webhook
+```
+
+y configura el evento:
+
+```text
+payment_intent.succeeded
+```
+
+El secreto `whsec_...` debe configurarse únicamente como variable de entorno del backend.
+
+En modo demo no es necesario configurar Stripe ni su webhook.
+
+## Seguridad
+
+Los archivos `.env` contienen información sensible y están excluidos mediante `.gitignore`.
+
+Utiliza los archivos `.env.example` como referencia para conocer las variables necesarias sin incluir sus valores reales.
 
 ## Documentación
 
-- [API: desarrollo, configuración y despliegue](./encore-api/README.md)
-- [Frontend: desarrollo, seguridad y variables](./frontend/README.md)
-
-## GitHub repository description
-
-Encore — concert discovery and ticketing platform built with React and Spring Boot, featuring secure HttpOnly-cookie authentication, a no-charge demo checkout, optional Stripe payments, and AI-powered support.
+- [API: desarrollo, configuración y despliegue](backend/README.md)
+- [Frontend: desarrollo, seguridad y variables](frontend/README.md)
