@@ -1,109 +1,33 @@
-# Encore API
+# Encore
 
-Backend de una plataforma de venta de entradas para conciertos, construido con Spring Boot. Autenticación robusta, integración con APIs externas reales, pagos, control de concurrencia y un asistente de soporte con RAG.
+Plataforma web de descubrimiento y venta de entradas para conciertos, construida con React y Spring Boot. Incluye catálogo de eventos, cuentas de usuario, reservas de entradas, modo de compra demo sin cargos, integración opcional con Stripe y un asistente de soporte con IA.
 
-## Características
+## Stack
 
-- **Autenticación**: registro con verificación de email real, login con JWT, roles (USER/ADMIN)
-- **Seguridad**: verificación en dos pasos (TOTP/Google Authenticator), rate limiting contra fuerza bruta
-- **Eventos**: catálogo de conciertos sincronizado desde la Ticketmaster Discovery API
-- **Compra de entradas**: reserva de stock con bloqueo optimista para evitar overselling, expiración automática de órdenes no pagadas
-- **Pagos**: integración con Stripe (PaymentIntents + webhook de confirmación)
-- **Asistente de soporte (RAG)**: responde preguntas sobre la plataforma usando Google Gemini + pgvector
-- **Panel de administración**: gestión de usuarios, órdenes, tipos de entrada y estadísticas
+- Frontend: React, Vite y Stripe Elements.
+- Backend: Java 21, Spring Boot, Spring Security y JWT en cookies HttpOnly.
+- Persistencia: PostgreSQL; Supabase es una opción de alojamiento.
+- Integraciones opcionales: Ticketmaster, Google Gemini y Stripe.
 
-## Stack técnico
+## Ejecutar localmente
 
-- Java 21, Spring Boot 4
-- Spring Security + JWT (JJWT)
-- Spring Data JPA + PostgreSQL + pgvector
-- Spring AI (Google Gemini) para RAG
-- Stripe Java SDK
-- Docker / Docker Compose
-- JUnit 5 + Mockito
+Consulta [instrucciones del backend](./encore-api/README.md) para configurar PostgreSQL, las variables de entorno y Docker Compose. Luego ejecuta el frontend desde `frontend` con `npm install` y `npm run dev`.
 
-## Arquitectura
+El modo de compra demo está activado por defecto. Genera órdenes y entradas de demostración sin crear PaymentIntents ni cobrar dinero. Para una demostración de portfolio, deja `PAYMENTS_DEMO_MODE=true`; las órdenes se marcan como demo y no como ventas pagadas.
 
-El proyecto sigue una organización por responsabilidad (no por capas técnicas):
+## Despliegue
 
-- `user` — registro, login, perfil, DTOs de usuario
-- `security` — JWT, filtro de autenticación, TOTP, rate limiting
-- `event` — integración con Ticketmaster, catálogo de eventos
-- `ticket` — tipos de entrada, órdenes, control de stock
-- `payment` — Stripe, PaymentIntents, webhook
-- `support` — RAG (vector store + chat)
-- `admin` — endpoints de administración
-- `email`, `config` — utilidades transversales
+Hay una guía de configuración manual de Render + Supabase, variables requeridas, dominios, cookies y webhook Stripe en [README del backend](./encore-api/README.md#despliegue-manual-en-render--supabase). No se incluye `render.yaml` ni se han creado servicios de hosting; configurar esos servicios y validar un despliegue real sigue siendo un paso manual.
 
-## Cómo levantarlo
+**Importante sobre el checkout actual:** la raíz Git conectada al remoto `Encore-APIs` es `encore-api`; `frontend` y este README están fuera de ese repositorio. La API puede desplegarse desde la raíz del repo existente, pero Render no podrá construir el frontend desde ese repo hasta que publiques el frontend en su propio repositorio o consolides ambos directorios en un repositorio común. El `.gitignore` dentro de `encore-api` protege los secretos de ese repositorio; el `.gitignore` de la raíz y `frontend/.gitignore` solo aplican al integrar/publicar esos directorios bajo sus respectivos repositorios.
 
-### Requisitos
-- Docker y Docker Compose
-- Claves de: Mailtrap (o SMTP propio), Ticketmaster Discovery API, Stripe (modo test), Google AI Studio (Gemini)
+Si habilitas Stripe, registra `https://<api>.onrender.com/api/payments/webhook` como webhook, selecciona `payment_intent.succeeded` y configura el secreto `whsec_...` únicamente en el backend. En modo demo no se necesita webhook ni una cuenta de Stripe configurada.
 
-### Variables de entorno
+## Documentación
 
-Copia `.env.example` a `.env` y rellena los valores:
+- [API: desarrollo, configuración y despliegue](./encore-api/README.md)
+- [Frontend: desarrollo, seguridad y variables](./frontend/README.md)
 
-\```
-DB_PASSWORD=
-MAIL_PASSWORD=
-TICKETMASTER_API_KEY=
-STRIPE_API_KEY=
-STRIPE_WEBHOOK_SECRET=
-JWT_SECRET=
-GEMINI_API_KEY=
-\```
+## GitHub repository description
 
-### Levantar con Docker
-
-\```bash
-docker compose up --build
-\```
-
-La API queda disponible en `http://localhost:8080`.
-
-### Desarrollo local (sin Docker, con IntelliJ)
-
-1. Levanta solo la base de datos: `docker compose up -d postgres`
-2. Define las variables de entorno de arriba en la configuración de Run de tu IDE
-3. Ejecuta `EncoreApiApplication`
-
-### Tests
-
-\```bash
-./mvnw test
-\```
-
-## Endpoints principales
-
-| Método | Ruta | Descripción | Acceso |
-|---|---|---|---|
-| POST | `/api/auth/register` | Registro de usuario | Público |
-| GET | `/api/auth/verify` | Verificación de email | Público |
-| POST | `/api/auth/login` | Login | Público |
-| POST | `/api/auth/login/totp` | Login con código 2FA | Público |
-| POST | `/api/auth/totp/setup` | Activar 2FA (genera QR) | Autenticado |
-| POST | `/api/auth/totp/confirm` | Confirmar activación 2FA | Autenticado |
-| GET | `/api/auth/me` | Perfil propio | Autenticado |
-| GET | `/api/events` | Listar eventos | Público |
-| POST | `/api/events/sync` | Sincronizar con Ticketmaster | ADMIN |
-| GET | `/api/ticket-types/event/{id}` | Tipos de entrada de un evento | Público |
-| POST | `/api/ticket-types` | Crear tipo de entrada | ADMIN |
-| PATCH | `/api/ticket-types/{id}` | Editar tipo de entrada | ADMIN |
-| POST | `/api/orders` | Comprar entradas | Autenticado |
-| GET | `/api/orders` | Ver mis órdenes | Autenticado |
-| POST | `/api/payments/create-intent/{orderId}` | Iniciar pago | Autenticado |
-| POST | `/api/payments/webhook` | Webhook de Stripe | Stripe (firma verificada) |
-| POST | `/api/support/ask` | Preguntar al asistente | Público |
-| GET | `/api/admin/orders` | Ver todas las órdenes | ADMIN |
-| POST | `/api/admin/orders/{id}/cancel` | Cancelar orden | ADMIN |
-| GET | `/api/admin/users` | Listar usuarios | ADMIN |
-| PATCH | `/api/admin/users/{id}/role` | Cambiar rol de usuario | ADMIN |
-| GET | `/api/admin/stats` | Estadísticas | ADMIN |
-
-## Notas honestas
-
-- El webhook de Stripe está implementado y verifica la firma correctamente, pero no se ha probado contra un pago real de Stripe porque el proyecto no está desplegado con una URL pública. Se activaría configurando el endpoint en el Dashboard de Stripe apuntando a la URL del deploy.
-- No incluye frontend.
-
+Encore — concert discovery and ticketing platform built with React and Spring Boot, featuring secure HttpOnly-cookie authentication, a no-charge demo checkout, optional Stripe payments, and AI-powered support.
