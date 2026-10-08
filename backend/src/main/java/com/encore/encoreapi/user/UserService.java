@@ -39,6 +39,7 @@ public class UserService {
         this.loginAttemptService = loginAttemptService;
     }
 
+    @Transactional
     public User register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Ya existe una cuenta con este email");
