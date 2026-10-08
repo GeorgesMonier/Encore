@@ -3,8 +3,9 @@ package com.encore.encoreapi.event;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 
@@ -12,7 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @Component
-public class TicketmasterSyncRunner implements ApplicationRunner {
+public class TicketmasterSyncRunner {
 
     private static final Logger log = LoggerFactory.getLogger(TicketmasterSyncRunner.class);
     private final EventSyncService eventSyncService;
@@ -32,13 +33,15 @@ public class TicketmasterSyncRunner implements ApplicationRunner {
                 .toList();
     }
 
-    @Override
-    public void run(ApplicationArguments args) {
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
+    public void syncAfterApplicationReady() {
         if (!enabled) {
             log.info("Sincronización automática de Ticketmaster desactivada");
             return;
         }
 
+        log.info("Iniciando sincronización automática de Ticketmaster para {} ciudades", cities.size());
         for (String city : cities) {
             try {
                 int imported = eventSyncService.syncEvents(city, "ES");
