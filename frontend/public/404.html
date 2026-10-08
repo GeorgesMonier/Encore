@@ -7,6 +7,19 @@
     <meta name="theme-color" content="#111b42" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>404 — Encore</title>
+    <script>
+      const spaRoutes = ['/privacidad', '/terminos', '/perfil'];
+      const requestedPath = `${window.location.pathname.replace(/\/+$/, '') || '/'}${window.location.search}${window.location.hash}`;
+      if (spaRoutes.includes(window.location.pathname.replace(/\/+$/, '') || '/')) {
+        try {
+          window.sessionStorage.setItem('encore_static_route', requestedPath);
+          document.documentElement.style.visibility = 'hidden';
+          window.location.replace('/');
+        } catch (error) {
+          console.warn('No se pudo recuperar la ruta de la aplicación.', error);
+        }
+      }
+    </script>
     <style>
       body{margin:0;min-height:100vh;display:grid;place-items:center;background:#faf9f5;color:#111b42;font:16px system-ui,sans-serif}
       main{max-width:560px;padding:36px}
@@ -23,16 +36,5 @@
       <p>La página que buscas no existe o se ha movido.</p>
       <a href="/">Volver a Encore</a>
     </main>
-    <script>
-      try {
-        const requestedPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        if (window.location.pathname !== '/') {
-          window.sessionStorage.setItem('encore_static_route', requestedPath);
-          window.location.replace('/');
-        }
-      } catch (error) {
-        console.warn('No se pudo recuperar la ruta de la aplicación.', error);
-      }
-    </script>
   </body>
 </html>
