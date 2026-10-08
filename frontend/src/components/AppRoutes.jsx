@@ -9,6 +9,20 @@ import TermsPage from './TermsPage.jsx';
 import useAnalyticsConsent from '../hooks/useAnalyticsConsent.js';
 import useDocumentMetadata from '../hooks/useDocumentMetadata.js';
 
+function restoreStaticRoute() {
+  try {
+    const requestedPath = window.sessionStorage.getItem('encore_static_route');
+    if (!requestedPath) return;
+
+    window.sessionStorage.removeItem('encore_static_route');
+    if (requestedPath.startsWith('/') && !requestedPath.startsWith('//')) {
+      window.history.replaceState(null, '', requestedPath);
+    }
+  } catch (error) {
+    console.warn('No se pudo restaurar la ruta solicitada.', error);
+  }
+}
+
 export default function AppRoutes() {
   const [cookieSettingsOpen, setCookieSettingsOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
@@ -19,6 +33,7 @@ export default function AppRoutes() {
       return 'light';
     }
   });
+  restoreStaticRoute();
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const isPrivacyPage = pathname === '/privacidad';
   const isTermsPage = pathname === '/terminos';

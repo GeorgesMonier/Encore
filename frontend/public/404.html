@@ -23,5 +23,16 @@
       <p>La página que buscas no existe o se ha movido.</p>
       <a href="/">Volver a Encore</a>
     </main>
+    <script>
+      try {
+        const requestedPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (window.location.pathname !== '/') {
+          window.sessionStorage.setItem('encore_static_route', requestedPath);
+          window.location.replace('/');
+        }
+      } catch (error) {
+        console.warn('No se pudo recuperar la ruta de la aplicación.', error);
+      }
+    </script>
   </body>
 </html>
