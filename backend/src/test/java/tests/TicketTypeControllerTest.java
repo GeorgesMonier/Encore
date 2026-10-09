@@ -6,6 +6,8 @@ import com.encore.encoreapi.payment.PaymentMode;
 import com.encore.encoreapi.ticket.TicketType;
 import com.encore.encoreapi.ticket.TicketTypeController;
 import com.encore.encoreapi.ticket.TicketTypeRepository;
+import com.encore.encoreapi.ticket.TicketPurchaseLimits;
+import com.encore.encoreapi.ticket.TicketCategory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -35,13 +37,17 @@ class TicketTypeControllerTest {
         when(ticketTypeRepository.findByEventId(eventId)).thenReturn(List.of(general, oldDemo));
         when(paymentMode.isDemoMode()).thenReturn(false);
 
-        var result = new TicketTypeController(ticketTypeRepository, eventRepository, paymentMode)
+        var result = new TicketTypeController(ticketTypeRepository, eventRepository, paymentMode,
+                new TicketPurchaseLimits(10, 5))
                 .getByEvent(eventId);
 
         assertEquals(200, result.getStatusCode().value());
         assertNotNull(result.getBody());
-        assertEquals(List.of(general), result.getBody());
-        assertEquals(13, result.getBody().get(0).getSoldQuantity());
+        assertEquals(1, result.getBody().size());
+        assertEquals(TicketCategory.NORMAL, result.getBody().get(0).category());
+        assertEquals(13, result.getBody().get(0).soldQuantity());
+        assertEquals(10, result.getBody().get(0).userPurchaseLimit());
+        assertEquals("EUR", result.getBody().get(0).currency());
     }
 
     @Test
@@ -53,9 +59,13 @@ class TicketTypeControllerTest {
         when(ticketTypeRepository.findByEventId(eventId)).thenReturn(inventory);
         when(paymentMode.isDemoMode()).thenReturn(true);
 
-        var result = new TicketTypeController(ticketTypeRepository, eventRepository, paymentMode)
+        var result = new TicketTypeController(ticketTypeRepository, eventRepository, paymentMode,
+                new TicketPurchaseLimits(10, 5))
                 .getByEvent(eventId);
 
-        assertEquals(inventory, result.getBody());
+        assertEquals(1, result.getBody().size());
+        assertEquals(TicketCategory.NORMAL, result.getBody().get(0).category());
+        assertEquals(0, result.getBody().get(0).reservedQuantity());
+        assertEquals(10, result.getBody().get(0).availableQuantity());
     }
 }

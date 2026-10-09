@@ -30,7 +30,7 @@ public class OrderExpirationService {
         for (Order order : pendingOrders) {
             for (OrderItem item : order.getItems()) {
                 TicketType ticketType = item.getTicketType();
-                ticketType.setAvailableQuantity(ticketType.getAvailableQuantity() + item.getQuantity());
+                ticketType.releaseReservation(item.getQuantity());
                 ticketTypeRepository.save(ticketType);
             }
 

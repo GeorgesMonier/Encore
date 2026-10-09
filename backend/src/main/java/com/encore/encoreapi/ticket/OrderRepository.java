@@ -13,6 +13,7 @@ import jakarta.persistence.LockModeType;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByUserId(UUID userId);
+    Optional<Order> findByUserIdAndIdempotencyKey(UUID userId, UUID idempotencyKey);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :orderId")

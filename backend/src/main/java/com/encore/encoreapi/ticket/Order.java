@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_orders_user_idempotency_key", columnNames = {"user_id", "idempotency_key"})
+})
 public class Order {
 
     @Id
@@ -27,6 +29,9 @@ public class Order {
     @Column(nullable = false)
     private BigDecimal totalAmount;
 
+    @Column(nullable = false, length = 3)
+    private String currency = "EUR";
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -35,6 +40,9 @@ public class Order {
 
     @Column(unique = true)
     private String stripePaymentIntentId;
+
+    @Column
+    private UUID idempotencyKey;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
@@ -55,12 +63,16 @@ public class Order {
     public void setStatus(OrderStatus status) { this.status = status; }
     public BigDecimal getTotalAmount() { return totalAmount; }
     public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getExpiresAt() { return expiresAt; }
     public String getStripePaymentIntentId() { return stripePaymentIntentId; }
     public void setStripePaymentIntentId(String stripePaymentIntentId) {
         this.stripePaymentIntentId = stripePaymentIntentId;
     }
+    public UUID getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(UUID idempotencyKey) { this.idempotencyKey = idempotencyKey; }
     public List<OrderItem> getItems() { return items; }
     public void addItem(OrderItem item) {
         items.add(item);

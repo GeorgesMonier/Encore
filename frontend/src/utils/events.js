@@ -38,9 +38,9 @@ export function formatTime(value) {
   return match ? `${match[1]}:${match[2]}` : '';
 }
 
-export function formatPrice(value) {
+export function formatPrice(value, currency = 'EUR') {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
-    currency: 'EUR',
+    currency,
   }).format(Number(value));
 }

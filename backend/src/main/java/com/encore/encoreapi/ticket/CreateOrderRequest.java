@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
+import java.util.UUID;
 
 public class CreateOrderRequest {
 
@@ -12,8 +13,13 @@ public class CreateOrderRequest {
     @Valid
     private List<OrderItemRequest> items;
 
+    @NotNull
+    private UUID idempotencyKey;
+
     public List<OrderItemRequest> getItems() { return items; }
     public void setItems(List<OrderItemRequest> items) { this.items = items; }
+    public UUID getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(UUID idempotencyKey) { this.idempotencyKey = idempotencyKey; }
 
     public static class OrderItemRequest {
         @NotNull

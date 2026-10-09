@@ -9,6 +9,7 @@ public record OrderResponse(
         UUID id,
         OrderStatus status,
         BigDecimal totalAmount,
+        String currency,
         LocalDateTime createdAt,
         LocalDateTime expiresAt,
         List<Item> items
@@ -24,7 +25,7 @@ public record OrderResponse(
                         i.getUnitPrice()))
                 .toList();
 
-        return new OrderResponse(order.getId(), order.getStatus(), order.getTotalAmount(),
+        return new OrderResponse(order.getId(), order.getStatus(), order.getTotalAmount(), order.getCurrency(),
                 order.getCreatedAt(), order.getExpiresAt(), items);
     }
 }

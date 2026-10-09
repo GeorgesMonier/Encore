@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { api } from '../api.js';
@@ -23,6 +23,7 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
   const [paid, setPaid] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const idempotencyKey = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -56,6 +57,11 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
     (sum, ticket) => sum + Number(ticket.price) * (quantities[ticket.id] ?? 0),
     0,
   );
+  const selectedCurrency = ticketTypes.find((ticket) => (quantities[ticket.id] ?? 0) > 0)?.currency;
+  const selectedByCategory = ticketTypes.reduce((totals, ticket) => {
+    totals[ticket.category] = (totals[ticket.category] ?? 0) + (quantities[ticket.id] ?? 0);
+    return totals;
+  }, {});
 
   async function reserve() {
     if (!user) {
@@ -75,9 +81,10 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
     setSubmitting(true);
     setPaymentError('');
     try {
+      if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID();
       const order = await api('/orders', {
         method: 'POST',
-        body: JSON.stringify({ items: selectedTickets }),
+        body: JSON.stringify({ items: selectedTickets, idempotencyKey: idempotencyKey.current }),
       });
       if (demoMode) {
         await api(`/payments/demo-confirm/${order.id}`, { method: 'POST' });
@@ -171,20 +178,23 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
               <div className="ticket-row" key={ticket.id}>
                 <div>
                   <strong>{ticket.name}</strong>
-                  <span>{ticket.availableQuantity} disponibles · {ticket.soldQuantity ?? (ticket.totalQuantity - ticket.availableQuantity)} vendidas</span>
+                  <span>{ticket.category} · {ticket.availableQuantity} disponibles · {ticket.reservedQuantity} reservadas · {ticket.soldQuantity} vendidas · Máx. {ticket.userPurchaseLimit} por usuario</span>
                 </div>
                 <div className="ticket-actions">
-                  <b>{formatPrice(ticket.price)}</b>
+                  <b>{formatPrice(ticket.price, ticket.currency)}</b>
                   <div className="stepper">
                     <button
                       aria-label={`Quitar una entrada ${ticket.name}`}
-                      disabled={!(quantities[ticket.id] > 0)}
+                      disabled={Boolean(currentOrderId) || !(quantities[ticket.id] > 0)}
                       onClick={() => setQuantities((current) => ({ ...current, [ticket.id]: Math.max((current[ticket.id] ?? 0) - 1, 0) }))}
                     ><Icon name="minus" size={14} /></button>
                     <span>{quantities[ticket.id] ?? 0}</span>
                     <button
                       aria-label={`Añadir una entrada ${ticket.name}`}
-                      disabled={quantities[ticket.id] >= ticket.availableQuantity}
+                      disabled={Boolean(currentOrderId)
+                        || quantities[ticket.id] >= ticket.availableQuantity
+                        || selectedByCategory[ticket.category] >= ticket.userPurchaseLimit
+                        || Boolean(selectedCurrency && selectedCurrency !== ticket.currency)}
                       onClick={() => setQuantities((current) => ({ ...current, [ticket.id]: (current[ticket.id] ?? 0) + 1 }))}
                     ><Icon name="plus" size={14} /></button>
                   </div>
@@ -201,7 +211,7 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
             {paymentPending && <p className="ticket-loading" role="status">Pago recibido por Stripe. Esperando la confirmación segura del servidor…</p>}
             {!clientSecret && !paid && !loading && !error && ticketTypes.length > 0 && (
               <div className="ticket-total">
-                {total > 0 && <div className="total-line"><span>Total</span><strong>{formatPrice(total)}</strong></div>}
+                {total > 0 && <div className="total-line"><span>Total</span><strong>{formatPrice(total, selectedCurrency)}</strong></div>}
                 <button className="button button-dark reserve-button" disabled={!selectedTickets.length || submitting || demoMode === null || (demoMode === false && !stripePromise)} onClick={() => void reserve()}>
                   {submitting ? 'Preparando tu reserva…' : !user ? 'Inicia sesión para reservar' : demoMode ? 'Confirmar compra demo' : 'Continuar al pago'}
                   {!submitting && <Icon name="arrow" size={17} />}

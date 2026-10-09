@@ -43,7 +43,7 @@ export default function OrdersDialog({ onClose }) {
                 <span>{formatDate(order.createdAt)} · {statusLabels[order.status] ?? order.status}</span>
                 {order.expiresAt && order.status === 'PENDING' && <span>Reserva hasta {formatDate(order.expiresAt)}</span>}
               </div>
-              <b>{formatPrice(order.totalAmount)}</b>
+              <b>{formatPrice(order.totalAmount, order.currency)}</b>
             </article>
           ))}
         </div>

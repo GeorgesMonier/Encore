@@ -3,6 +3,7 @@ package tests;
 import com.encore.encoreapi.ticket.*;
 import com.encore.encoreapi.event.Event;
 import com.encore.encoreapi.payment.PaymentMode;
+import com.encore.encoreapi.payment.StripeRefundService;
 import com.encore.encoreapi.user.User;
 import com.encore.encoreapi.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,8 @@ class OrderServiceTest {
     @Mock private TicketTypeRepository ticketTypeRepository;
     @Mock private UserRepository userRepository;
     @Mock private PaymentMode paymentMode;
+    @Mock private TicketPurchaseLimits purchaseLimits;
+    @Mock private StripeRefundService stripeRefundService;
 
     @InjectMocks
     private OrderService orderService;
@@ -50,6 +53,9 @@ class OrderServiceTest {
         user = new User("buyer@test.com", "hashed", "Buyer");
         ReflectionTestUtils.setField(user, "id", userId);
         ticketType = new TicketType(event, "General", new BigDecimal("40.00"), 10);
+        ReflectionTestUtils.setField(ticketType, "id", ticketTypeId);
+        lenient().when(purchaseLimits.forCategory(TicketCategory.NORMAL)).thenReturn(10);
+        lenient().when(purchaseLimits.forCategory(TicketCategory.VIP)).thenReturn(5);
     }
 
     @Test
@@ -62,6 +68,7 @@ class OrderServiceTest {
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
         CreateOrderRequest request = new CreateOrderRequest();
+        request.setIdempotencyKey(UUID.randomUUID());
         CreateOrderRequest.OrderItemRequest item = new CreateOrderRequest.OrderItemRequest();
         item.setTicketTypeId(ticketTypeId);
         item.setQuantity(3);
@@ -71,6 +78,8 @@ class OrderServiceTest {
 
         assertEquals(new BigDecimal("120.00"), order.getTotalAmount());
         assertEquals(7, ticketType.getAvailableQuantity());
+        assertEquals(3, ticketType.getReservedQuantity());
+        assertEquals(0, ticketType.getSoldQuantity());
         assertEquals(OrderStatus.PENDING, order.getStatus());
         assertTrue(order.getExpiresAt().isAfter(LocalDateTime.now().plusMinutes(14)));
     }
@@ -89,6 +98,77 @@ class OrderServiceTest {
         assertEquals(OrderStatus.DEMO, response.status());
         assertEquals(new BigDecimal("45.00"), response.totalAmount());
         verify(orderRepository).save(order);
+    }
+
+    @Test
+    void rejectsAnOrderContainingDifferentCurrencies() {
+        TicketType usdTicket = new TicketType(
+                event, "General USD", TicketCategory.NORMAL, "USD", new BigDecimal("40.00"), 10);
+        UUID usdTicketTypeId = UUID.randomUUID();
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(orderRepository.findByUserId(userId)).thenReturn(List.of());
+        when(ticketTypeRepository.findById(ticketTypeId)).thenReturn(Optional.of(ticketType));
+        when(ticketTypeRepository.findById(usdTicketTypeId)).thenReturn(Optional.of(usdTicket));
+        when(paymentMode.isDemoMode()).thenReturn(false);
+        when(ticketTypeRepository.saveAndFlush(any(TicketType.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateOrderRequest request = new CreateOrderRequest();
+        request.setIdempotencyKey(UUID.randomUUID());
+        request.setItems(List.of(orderItem(ticketTypeId, 1), orderItem(usdTicketTypeId, 1)));
+        assertThrows(IllegalArgumentException.class, () -> orderService.createOrder(userId, request));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void returnsTheExistingPendingOrderForTheSameIdempotencyKeyAndCart() {
+        UUID requestKey = UUID.randomUUID();
+        Order existingOrder = new Order(user, new BigDecimal("80.00"));
+        existingOrder.setIdempotencyKey(requestKey);
+        existingOrder.addItem(new OrderItem(ticketType, 2, ticketType.getPrice()));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(orderRepository.findByUserIdAndIdempotencyKey(userId, requestKey))
+                .thenReturn(Optional.of(existingOrder));
+
+        Order retry = orderService.createOrder(userId, request(requestKey, ticketTypeId, 2));
+
+        assertSame(existingOrder, retry);
+        verify(orderRepository, never()).save(any(Order.class));
+        verifyNoInteractions(ticketTypeRepository);
+    }
+
+    @Test
+    void rejectsReusingAnIdempotencyKeyWithDifferentTicketQuantities() {
+        UUID requestKey = UUID.randomUUID();
+        Order existingOrder = new Order(user, new BigDecimal("40.00"));
+        existingOrder.setIdempotencyKey(requestKey);
+        existingOrder.addItem(new OrderItem(ticketType, 1, ticketType.getPrice()));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(orderRepository.findByUserIdAndIdempotencyKey(userId, requestKey))
+                .thenReturn(Optional.of(existingOrder));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> orderService.createOrder(userId, request(requestKey, ticketTypeId, 2)));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void refundsPaidOrderBeforeReleasingItsSoldInventory() {
+        Order order = new Order(user, new BigDecimal("40.00"));
+        order.setStatus(OrderStatus.PAID);
+        order.setStripePaymentIntentId("pi_paid");
+        ticketType.reserve(1);
+        ticketType.confirmReservation(1);
+        order.addItem(new OrderItem(ticketType, 1, ticketType.getPrice()));
+        when(orderRepository.findByIdForUpdate(any())).thenReturn(Optional.of(order));
+        when(ticketTypeRepository.save(any(TicketType.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Order cancelled = orderService.cancelOrder(UUID.randomUUID());
+
+        verify(stripeRefundService).refundPaymentIntent("pi_paid");
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertEquals(10, ticketType.getAvailableQuantity());
+        assertEquals(0, ticketType.getSoldQuantity());
     }
 
     @Test
@@ -134,6 +214,31 @@ class OrderServiceTest {
     }
 
     @Test
+    void appliesConfiguredNormalLimitWhenReserving() {
+        when(purchaseLimits.forCategory(TicketCategory.NORMAL)).thenReturn(2);
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(orderRepository.findByUserId(userId)).thenReturn(List.of());
+        when(ticketTypeRepository.findById(ticketTypeId)).thenReturn(Optional.of(ticketType));
+        when(paymentMode.isDemoMode()).thenReturn(false);
+
+        assertThrows(IllegalArgumentException.class, () -> orderService.createOrder(userId, request(3)));
+        verify(ticketTypeRepository, never()).saveAndFlush(any(TicketType.class));
+    }
+
+    @Test
+    void reportsAnOptimisticInventoryConflictInsteadOfOverselling() {
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(orderRepository.findByUserId(userId)).thenReturn(List.of());
+        when(ticketTypeRepository.findById(ticketTypeId)).thenReturn(Optional.of(ticketType));
+        when(paymentMode.isDemoMode()).thenReturn(false);
+        when(ticketTypeRepository.saveAndFlush(ticketType)).thenThrow(
+                new org.springframework.orm.ObjectOptimisticLockingFailureException(TicketType.class, ticketTypeId));
+
+        assertThrows(IllegalArgumentException.class, () -> orderService.createOrder(userId, request(1)));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
     void rejectsDemoInventoryWhenStripeIsActive() {
         TicketType demoTicket = new TicketType(event, "General (demo)", new BigDecimal("45.00"), 10);
         UUID demoTicketTypeId = UUID.randomUUID();
@@ -163,13 +268,22 @@ class OrderServiceTest {
     }
 
     private CreateOrderRequest request(UUID typeId, int... quantities) {
+        return request(UUID.randomUUID(), typeId, quantities);
+    }
+
+    private CreateOrderRequest request(UUID requestKey, UUID typeId, int... quantities) {
         CreateOrderRequest request = new CreateOrderRequest();
-        request.setItems(java.util.Arrays.stream(quantities).mapToObj(quantity -> {
-            CreateOrderRequest.OrderItemRequest item = new CreateOrderRequest.OrderItemRequest();
-            item.setTicketTypeId(typeId);
-            item.setQuantity(quantity);
-            return item;
-        }).toList());
+        request.setIdempotencyKey(requestKey);
+        request.setItems(java.util.Arrays.stream(quantities)
+                .mapToObj(quantity -> orderItem(typeId, quantity))
+                .toList());
         return request;
+    }
+
+    private CreateOrderRequest.OrderItemRequest orderItem(UUID typeId, int quantity) {
+        CreateOrderRequest.OrderItemRequest item = new CreateOrderRequest.OrderItemRequest();
+        item.setTicketTypeId(typeId);
+        item.setQuantity(quantity);
+        return item;
     }
 }

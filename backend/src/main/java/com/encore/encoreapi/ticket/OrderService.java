@@ -3,6 +3,8 @@ package com.encore.encoreapi.ticket;
 import com.encore.encoreapi.user.User;
 import com.encore.encoreapi.user.UserRepository;
 import com.encore.encoreapi.payment.PaymentMode;
+import com.encore.encoreapi.payment.StripeRefundService;
+import com.encore.encoreapi.payment.StripeCurrency;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,15 +19,21 @@ public class OrderService {
     private final TicketTypeRepository ticketTypeRepository;
     private final UserRepository userRepository;
     private final PaymentMode paymentMode;
+    private final TicketPurchaseLimits purchaseLimits;
+    private final StripeRefundService stripeRefundService;
 
     public OrderService(OrderRepository orderRepository,
                         TicketTypeRepository ticketTypeRepository,
                         UserRepository userRepository,
-                        PaymentMode paymentMode) {
+                        PaymentMode paymentMode,
+                        TicketPurchaseLimits purchaseLimits,
+                        StripeRefundService stripeRefundService) {
         this.orderRepository = orderRepository;
         this.ticketTypeRepository = ticketTypeRepository;
         this.userRepository = userRepository;
         this.paymentMode = paymentMode;
+        this.purchaseLimits = purchaseLimits;
+        this.stripeRefundService = stripeRefundService;
     }
 
     @Transactional
@@ -36,6 +44,9 @@ public class OrderService {
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new IllegalArgumentException("Selecciona al menos una entrada");
         }
+        if (request.getIdempotencyKey() == null) {
+            throw new IllegalArgumentException("La solicitud de compra debe incluir una clave de idempotencia");
+        }
 
         Map<UUID, Long> requestedQuantities = new LinkedHashMap<>();
         for (CreateOrderRequest.OrderItemRequest itemReq : request.getItems()) {
@@ -45,9 +56,24 @@ public class OrderService {
             requestedQuantities.merge(itemReq.getTicketTypeId(), (long) itemReq.getQuantity(), Long::sum);
         }
 
+        Optional<Order> previousAttempt = orderRepository.findByUserIdAndIdempotencyKey(
+                userId, request.getIdempotencyKey());
+        if (previousAttempt.isPresent()) {
+            Order existingOrder = previousAttempt.get();
+            if (!hasSameItems(existingOrder, requestedQuantities)) {
+                throw new IllegalArgumentException("La clave de compra ya está asociada a otra selección de entradas");
+            }
+            if (existingOrder.getStatus() != OrderStatus.PENDING || existingOrder.isExpired()) {
+                throw new IllegalArgumentException("La orden asociada a esta solicitud ya no está pendiente");
+            }
+            return existingOrder;
+        }
+
         Map<PurchaseLimitKey, Long> previousPurchases = getPreviousPurchases(userId);
         Order order = new Order(user, BigDecimal.ZERO);
+        order.setIdempotencyKey(request.getIdempotencyKey());
         BigDecimal total = BigDecimal.ZERO;
+        String currency = null;
 
         for (Map.Entry<UUID, Long> requested : requestedQuantities.entrySet()) {
             TicketType ticketType = ticketTypeRepository.findById(requested.getKey())
@@ -58,20 +84,20 @@ public class OrderService {
             long quantity = requested.getValue();
 
             PurchaseLimitKey limitKey = new PurchaseLimitKey(
-                    ticketType.getEvent().getId(), isVip(ticketType.getName()));
-            long limit = limitKey.vip() ? 5 : 10;
+                    ticketType.getEvent().getId(), ticketType.getCategory());
+            long limit = purchaseLimits.forCategory(limitKey.category());
             long alreadyPurchased = previousPurchases.getOrDefault(limitKey, 0L);
             if (alreadyPurchased + quantity > limit) {
-                String type = limitKey.vip() ? "VIP" : "generales";
+                String type = limitKey.category() == TicketCategory.VIP ? "VIP" : "NORMAL";
                 throw new IllegalArgumentException(
                         "El límite es de " + limit + " entradas " + type + " por usuario y concierto");
             }
 
-            if (ticketType.getAvailableQuantity() < quantity) {
-                throw new IllegalArgumentException(
-                        "No hay suficientes entradas disponibles para: " + ticketType.getName());
+            if (currency != null && !currency.equals(ticketType.getCurrency())) {
+                throw new IllegalArgumentException("Todas las entradas de una orden deben usar la misma moneda");
             }
-            ticketType.setAvailableQuantity(ticketType.getAvailableQuantity() - (int) quantity);
+            currency = ticketType.getCurrency();
+            ticketType.reserve(Math.toIntExact(quantity));
             try {
                 ticketTypeRepository.saveAndFlush(ticketType);
             } catch (ObjectOptimisticLockingFailureException e) {
@@ -87,7 +113,17 @@ public class OrderService {
         }
 
         order.setTotalAmount(total);
+        order.setCurrency(currency);
+        StripeCurrency.toMinorUnits(total, currency);
         return orderRepository.save(order);
+    }
+
+    private boolean hasSameItems(Order order, Map<UUID, Long> requestedQuantities) {
+        Map<UUID, Long> existingQuantities = new HashMap<>();
+        for (OrderItem item : order.getItems()) {
+            existingQuantities.merge(item.getTicketType().getId(), (long) item.getQuantity(), Long::sum);
+        }
+        return existingQuantities.equals(requestedQuantities);
     }
 
     private Map<PurchaseLimitKey, Long> getPreviousPurchases(UUID userId) {
@@ -100,18 +136,14 @@ public class OrderService {
             }
             for (OrderItem item : existingOrder.getItems()) {
                 PurchaseLimitKey key = new PurchaseLimitKey(
-                        item.getTicketType().getEvent().getId(), isVip(item.getTicketType().getName()));
+                        item.getTicketType().getEvent().getId(), item.getTicketType().getCategory());
                 purchases.merge(key, (long) item.getQuantity(), Long::sum);
             }
         }
         return purchases;
     }
 
-    private boolean isVip(String ticketTypeName) {
-        return ticketTypeName.toLowerCase(Locale.ROOT).contains("vip");
-    }
-
-    private record PurchaseLimitKey(UUID eventId, boolean vip) {}
+    private record PurchaseLimitKey(UUID eventId, TicketCategory category) {}
 
     @Transactional
     public OrderResponse confirmDemoPayment(UUID userId, UUID orderId) {
@@ -127,6 +159,11 @@ public class OrderService {
         if (order.getStatus() != OrderStatus.PENDING || order.isExpired()) {
             throw new IllegalArgumentException("La reserva ya no está pendiente o ha expirado");
         }
+        for (OrderItem item : order.getItems()) {
+            TicketType ticketType = item.getTicketType();
+            ticketType.confirmReservation(item.getQuantity());
+            ticketTypeRepository.save(ticketType);
+        }
         order.setStatus(OrderStatus.DEMO);
         return OrderResponse.from(orderRepository.save(order));
     }
@@ -141,10 +178,20 @@ public class OrderService {
                 && order.getStatus() != OrderStatus.DEMO) {
             throw new IllegalArgumentException("Solo se pueden cancelar órdenes PENDING, PAID o DEMO");
         }
+        if (order.getStatus() == OrderStatus.PAID) {
+            if (order.getStripePaymentIntentId() == null) {
+                throw new IllegalStateException("No se puede cancelar una orden pagada sin referencia de Stripe");
+            }
+            stripeRefundService.refundPaymentIntent(order.getStripePaymentIntentId());
+        }
 
         for (OrderItem item : order.getItems()) {
             TicketType ticketType = item.getTicketType();
-            ticketType.setAvailableQuantity(ticketType.getAvailableQuantity() + item.getQuantity());
+            if (order.getStatus() == OrderStatus.PENDING) {
+                ticketType.releaseReservation(item.getQuantity());
+            } else {
+                ticketType.releaseSold(item.getQuantity());
+            }
             ticketTypeRepository.save(ticketType);
         }
 

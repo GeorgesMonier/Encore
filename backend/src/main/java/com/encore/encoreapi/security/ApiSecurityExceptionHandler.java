@@ -8,6 +8,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.csrf.InvalidCsrfTokenException;
+import org.springframework.security.web.csrf.MissingCsrfTokenException;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
@@ -36,10 +38,21 @@ public class ApiSecurityExceptionHandler implements AuthenticationEntryPoint, Ac
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        AccessDeniedException exception) throws IOException {
-        log.warn("Access denied for {} {} ({})", request.getMethod(), request.getRequestURI(),
-                exception.getClass().getSimpleName());
-        writeError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
-                "La solicitud no está autorizada o su protección CSRF no es válida.");
+        String cause;
+        String message;
+        if (exception instanceof MissingCsrfTokenException) {
+            cause = "csrf_missing";
+            message = "Falta el token CSRF. Recarga la página e inténtalo de nuevo.";
+        } else if (exception instanceof InvalidCsrfTokenException) {
+            cause = "csrf_invalid";
+            message = "El token CSRF no es válido. Recarga la página e inténtalo de nuevo.";
+        } else {
+            cause = "access_denied";
+            message = "No tienes permiso para realizar esta operación.";
+        }
+        log.warn("Request rejected with HTTP 403: {} {} cause={}",
+                request.getMethod(), request.getRequestURI(), cause);
+        writeError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden", message);
     }
 
     private void writeError(HttpServletResponse response, int status, String error, String message)

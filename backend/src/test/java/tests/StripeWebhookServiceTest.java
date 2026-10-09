@@ -3,8 +3,11 @@ package tests;
 import com.encore.encoreapi.payment.StripeWebhookService;
 import com.encore.encoreapi.payment.StripeRefundService;
 import com.encore.encoreapi.ticket.Order;
+import com.encore.encoreapi.ticket.OrderItem;
 import com.encore.encoreapi.ticket.OrderRepository;
 import com.encore.encoreapi.ticket.OrderStatus;
+import com.encore.encoreapi.ticket.TicketType;
+import com.encore.encoreapi.ticket.TicketTypeRepository;
 import com.encore.encoreapi.user.User;
 import com.stripe.model.PaymentIntent;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,7 @@ import static org.mockito.Mockito.*;
 class StripeWebhookServiceTest {
 
     @Mock private OrderRepository orderRepository;
+    @Mock private TicketTypeRepository ticketTypeRepository;
     @Mock private StripeRefundService stripeRefundService;
 
     @Test
@@ -46,7 +50,8 @@ class StripeWebhookServiceTest {
 
         when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
-        StripeWebhookService service = new StripeWebhookService(orderRepository, stripeRefundService);
+        StripeWebhookService service = new StripeWebhookService(
+                orderRepository, ticketTypeRepository, stripeRefundService);
 
         service.confirmSuccessfulPayment(intent);
         service.confirmSuccessfulPayment(intent);
@@ -73,7 +78,8 @@ class StripeWebhookServiceTest {
         intent.setMetadata(Map.of("orderId", orderId.toString()));
 
         when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
-        StripeWebhookService service = new StripeWebhookService(orderRepository, stripeRefundService);
+        StripeWebhookService service = new StripeWebhookService(
+                orderRepository, ticketTypeRepository, stripeRefundService);
 
         service.confirmSuccessfulPayment(intent);
 
@@ -100,7 +106,8 @@ class StripeWebhookServiceTest {
         intent.setMetadata(Map.of("orderId", orderId.toString()));
 
         when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
-        StripeWebhookService service = new StripeWebhookService(orderRepository, stripeRefundService);
+        StripeWebhookService service = new StripeWebhookService(
+                orderRepository, ticketTypeRepository, stripeRefundService);
 
         service.confirmSuccessfulPayment(intent);
 
@@ -126,11 +133,48 @@ class StripeWebhookServiceTest {
         intent.setMetadata(Map.of("orderId", orderId.toString()));
 
         when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
-        StripeWebhookService service = new StripeWebhookService(orderRepository, stripeRefundService);
+        StripeWebhookService service = new StripeWebhookService(
+                orderRepository, ticketTypeRepository, stripeRefundService);
 
         service.confirmSuccessfulPayment(intent);
 
         verify(stripeRefundService).refundPaymentIntent(intent);
         assertEquals(OrderStatus.PENDING, order.getStatus());
+    }
+
+    @Test
+    void convertsReservedInventoryToSoldAfterVerifiedPayment() {
+        UUID orderId = UUID.randomUUID();
+        User user = new User("buyer@test.com", "hashed", "Buyer");
+        user.setStripeCustomerId("cus_test");
+        Order order = new Order(user, new BigDecimal("45.00"));
+        order.setStatus(OrderStatus.PENDING);
+        order.setStripePaymentIntentId("pi_test");
+        TicketType ticketType = new TicketType(
+                new com.encore.encoreapi.event.Event("concert-1", "Concert", null, null, null, null, null, null),
+                "NORMAL", new BigDecimal("45.00"), 10);
+        ticketType.reserve(1);
+        order.addItem(new OrderItem(ticketType, 1, new BigDecimal("45.00")));
+
+        PaymentIntent intent = new PaymentIntent();
+        intent.setId("pi_test");
+        intent.setStatus("succeeded");
+        intent.setAmount(4500L);
+        intent.setCurrency("eur");
+        intent.setCustomer("cus_test");
+        intent.setMetadata(Map.of("orderId", orderId.toString()));
+
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+        when(ticketTypeRepository.save(ticketType)).thenReturn(ticketType);
+        when(orderRepository.save(order)).thenReturn(order);
+
+        new StripeWebhookService(orderRepository, ticketTypeRepository, stripeRefundService)
+                .confirmSuccessfulPayment(intent);
+
+        assertEquals(OrderStatus.PAID, order.getStatus());
+        assertEquals(0, ticketType.getReservedQuantity());
+        assertEquals(1, ticketType.getSoldQuantity());
+        assertEquals(9, ticketType.getAvailableQuantity());
+        verify(ticketTypeRepository).save(ticketType);
     }
 }

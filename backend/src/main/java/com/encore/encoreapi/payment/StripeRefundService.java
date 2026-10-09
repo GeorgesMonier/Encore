@@ -15,11 +15,15 @@ public class StripeRefundService {
     private static final Logger log = LoggerFactory.getLogger(StripeRefundService.class);
 
     public void refundPaymentIntent(PaymentIntent paymentIntent) {
+        refundPaymentIntent(paymentIntent.getId());
+    }
+
+    public void refundPaymentIntent(String paymentIntentId) {
         RefundCreateParams params = RefundCreateParams.builder()
-                .setPaymentIntent(paymentIntent.getId())
+                .setPaymentIntent(paymentIntentId)
                 .build();
         RequestOptions options = RequestOptions.builder()
-                .setIdempotencyKey("encore-refund-" + paymentIntent.getId())
+                .setIdempotencyKey("encore-refund-" + paymentIntentId)
                 .build();
         try {
             Refund.create(params, options);

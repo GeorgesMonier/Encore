@@ -3,6 +3,9 @@ package com.encore.encoreapi.payment;
 import com.encore.encoreapi.ticket.Order;
 import com.encore.encoreapi.ticket.OrderRepository;
 import com.encore.encoreapi.ticket.OrderStatus;
+import com.encore.encoreapi.ticket.OrderItem;
+import com.encore.encoreapi.ticket.TicketType;
+import com.encore.encoreapi.ticket.TicketTypeRepository;
 import com.stripe.model.PaymentIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,18 +14,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Locale;
 
 @Service
 public class StripeWebhookService {
 
     private static final Logger log = LoggerFactory.getLogger(StripeWebhookService.class);
     private final OrderRepository orderRepository;
+    private final TicketTypeRepository ticketTypeRepository;
     private final StripeRefundService stripeRefundService;
 
     public StripeWebhookService(
             OrderRepository orderRepository,
+            TicketTypeRepository ticketTypeRepository,
             StripeRefundService stripeRefundService) {
         this.orderRepository = orderRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
         this.stripeRefundService = stripeRefundService;
     }
 
@@ -44,12 +51,13 @@ public class StripeWebhookService {
             return;
         }
 
-        long expectedAmount = order.getTotalAmount().movePointRight(2).longValueExact();
+        long expectedAmount = StripeCurrency.toMinorUnits(order.getTotalAmount(), order.getCurrency());
         String customerId = order.getUser().getStripeCustomerId();
         if (!"succeeded".equals(paymentIntent.getStatus())
                 || paymentIntent.getAmount() == null
                 || paymentIntent.getAmount() != expectedAmount
-                || !"eur".equals(paymentIntent.getCurrency())
+                || paymentIntent.getCurrency() == null
+                || !order.getCurrency().equals(paymentIntent.getCurrency().toUpperCase(Locale.ROOT))
                 || customerId == null
                 || !customerId.equals(paymentIntent.getCustomer())) {
             log.warn("Stripe succeeded event did not match Encore order payment details");
@@ -84,6 +92,11 @@ public class StripeWebhookService {
 
         if (storedPaymentIntentId == null) {
             order.setStripePaymentIntentId(paymentIntent.getId());
+        }
+        for (OrderItem item : order.getItems()) {
+            TicketType ticketType = item.getTicketType();
+            ticketType.confirmReservation(item.getQuantity());
+            ticketTypeRepository.save(ticketType);
         }
         order.setStatus(OrderStatus.PAID);
         orderRepository.save(order);

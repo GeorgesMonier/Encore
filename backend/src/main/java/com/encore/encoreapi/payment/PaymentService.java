@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.util.Objects;
 
 @Service
@@ -40,13 +41,12 @@ public class PaymentService {
             throw new IllegalArgumentException("La reserva ya no está pendiente o ha expirado");
         }
         String customerId = getOrCreateCustomer(user);
-        long amountInCents = lockedOrder.getTotalAmount()
-                .multiply(BigDecimal.valueOf(100))
-                .longValueExact();
+        long amountInMinorUnits = StripeCurrency.toMinorUnits(
+                lockedOrder.getTotalAmount(), lockedOrder.getCurrency());
 
         if (lockedOrder.getStripePaymentIntentId() != null) {
             PaymentIntent existingIntent = PaymentIntent.retrieve(lockedOrder.getStripePaymentIntentId());
-            if (!isPaymentIntentForOrder(existingIntent, lockedOrder, customerId, amountInCents)
+            if (!isPaymentIntentForOrder(existingIntent, lockedOrder, customerId, amountInMinorUnits)
                     || "canceled".equals(existingIntent.getStatus())) {
                 throw new IllegalArgumentException("El intento de pago anterior no se puede reutilizar");
             }
@@ -54,8 +54,8 @@ public class PaymentService {
         }
 
         PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
-                .setAmount(amountInCents)
-                .setCurrency("eur")
+                .setAmount(amountInMinorUnits)
+                .setCurrency(lockedOrder.getCurrency().toLowerCase(Locale.ROOT))
                 .setCustomer(customerId)
                 .setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.OFF_SESSION)
                 .putMetadata("orderId", lockedOrder.getId().toString())
@@ -76,9 +76,7 @@ public class PaymentService {
 
     public void verifyPaymentIntent(Order order, User user, String paymentIntentId) throws StripeException {
         PaymentIntent intent = PaymentIntent.retrieve(paymentIntentId);
-        long expectedAmount = order.getTotalAmount()
-                .multiply(BigDecimal.valueOf(100))
-                .longValueExact();
+        long expectedAmount = StripeCurrency.toMinorUnits(order.getTotalAmount(), order.getCurrency());
         String customerId = user.getStripeCustomerId();
         var metadata = intent.getMetadata();
 
@@ -88,19 +86,21 @@ public class PaymentService {
                 || !order.getId().toString().equals(metadata.get("orderId"))
                 || customerId == null || customerId.isBlank()
                 || !Objects.equals(customerId, intent.getCustomer())
-                || !Objects.equals("eur", intent.getCurrency())
+                || intent.getCurrency() == null
+                || !Objects.equals(order.getCurrency(), intent.getCurrency().toUpperCase(Locale.ROOT))
                 || !Objects.equals(expectedAmount, intent.getAmount())) {
             throw new IllegalArgumentException("Stripe no confirmó un pago válido para esta reserva");
         }
     }
 
     private boolean isPaymentIntentForOrder(PaymentIntent intent, Order order, String customerId,
-                                            long amountInCents) {
+                                            long amountInMinorUnits) {
         return order.getId().toString().equals(
                     intent.getMetadata() == null ? null : intent.getMetadata().get("orderId"))
                 && Objects.equals(customerId, intent.getCustomer())
-                && Objects.equals(amountInCents, intent.getAmount())
-                && Objects.equals("eur", intent.getCurrency());
+                && Objects.equals(amountInMinorUnits, intent.getAmount())
+                && intent.getCurrency() != null
+                && Objects.equals(order.getCurrency(), intent.getCurrency().toUpperCase(Locale.ROOT));
     }
 
     @Transactional
