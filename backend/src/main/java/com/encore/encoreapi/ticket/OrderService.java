@@ -2,12 +2,13 @@ package com.encore.encoreapi.ticket;
 
 import com.encore.encoreapi.user.User;
 import com.encore.encoreapi.user.UserRepository;
+import com.encore.encoreapi.payment.PaymentMode;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class OrderService {
@@ -15,36 +16,62 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final TicketTypeRepository ticketTypeRepository;
     private final UserRepository userRepository;
+    private final PaymentMode paymentMode;
 
     public OrderService(OrderRepository orderRepository,
                         TicketTypeRepository ticketTypeRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        PaymentMode paymentMode) {
         this.orderRepository = orderRepository;
         this.ticketTypeRepository = ticketTypeRepository;
         this.userRepository = userRepository;
+        this.paymentMode = paymentMode;
     }
 
     @Transactional
     public Order createOrder(UUID userId, CreateOrderRequest request) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new IllegalArgumentException("Selecciona al menos una entrada");
+        }
+
+        Map<UUID, Long> requestedQuantities = new LinkedHashMap<>();
+        for (CreateOrderRequest.OrderItemRequest itemReq : request.getItems()) {
+            if (itemReq.getTicketTypeId() == null || itemReq.getQuantity() <= 0) {
+                throw new IllegalArgumentException("Cada entrada debe tener un tipo válido y una cantidad mayor que 0");
+            }
+            requestedQuantities.merge(itemReq.getTicketTypeId(), (long) itemReq.getQuantity(), Long::sum);
+        }
+
+        Map<PurchaseLimitKey, Long> previousPurchases = getPreviousPurchases(userId);
         Order order = new Order(user, BigDecimal.ZERO);
         BigDecimal total = BigDecimal.ZERO;
 
-        for (CreateOrderRequest.OrderItemRequest itemReq : request.getItems()) {
-            if (itemReq.getQuantity() <= 0) {
-                throw new IllegalArgumentException("La cantidad debe ser mayor que 0");
+        for (Map.Entry<UUID, Long> requested : requestedQuantities.entrySet()) {
+            TicketType ticketType = ticketTypeRepository.findById(requested.getKey())
+                    .orElseThrow(() -> new IllegalArgumentException("Tipo de ticket no encontrado"));
+            if (!paymentMode.isDemoMode() && ticketType.isDemoTicket()) {
+                throw new IllegalArgumentException("Las entradas de demostración no se pueden comprar con Stripe");
+            }
+            long quantity = requested.getValue();
+
+            PurchaseLimitKey limitKey = new PurchaseLimitKey(
+                    ticketType.getEvent().getId(), isVip(ticketType.getName()));
+            long limit = limitKey.vip() ? 5 : 10;
+            long alreadyPurchased = previousPurchases.getOrDefault(limitKey, 0L);
+            if (alreadyPurchased + quantity > limit) {
+                String type = limitKey.vip() ? "VIP" : "generales";
+                throw new IllegalArgumentException(
+                        "El límite es de " + limit + " entradas " + type + " por usuario y concierto");
             }
 
-            TicketType ticketType = ticketTypeRepository.findById(itemReq.getTicketTypeId())
-                    .orElseThrow(() -> new IllegalArgumentException("Tipo de ticket no encontrado"));
-
-            if (ticketType.getAvailableQuantity() < itemReq.getQuantity()) {
+            if (ticketType.getAvailableQuantity() < quantity) {
                 throw new IllegalArgumentException(
                         "No hay suficientes entradas disponibles para: " + ticketType.getName());
             }
-            ticketType.setAvailableQuantity(ticketType.getAvailableQuantity() - itemReq.getQuantity());
+            ticketType.setAvailableQuantity(ticketType.getAvailableQuantity() - (int) quantity);
             try {
                 ticketTypeRepository.saveAndFlush(ticketType);
             } catch (ObjectOptimisticLockingFailureException e) {
@@ -52,21 +79,43 @@ public class OrderService {
                         "Las entradas para " + ticketType.getName() + " se agotaron mientras comprabas. Inténtalo de nuevo.");
             }
 
-            BigDecimal subtotal = ticketType.getPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+            BigDecimal subtotal = ticketType.getPrice().multiply(BigDecimal.valueOf(quantity));
             total = total.add(subtotal);
 
-            OrderItem orderItem = new OrderItem(ticketType, itemReq.getQuantity(), ticketType.getPrice());
+            OrderItem orderItem = new OrderItem(ticketType, (int) quantity, ticketType.getPrice());
             order.addItem(orderItem);
         }
-
 
         order.setTotalAmount(total);
         return orderRepository.save(order);
     }
 
+    private Map<PurchaseLimitKey, Long> getPreviousPurchases(UUID userId) {
+        Map<PurchaseLimitKey, Long> purchases = new HashMap<>();
+        for (Order existingOrder : orderRepository.findByUserId(userId)) {
+            if (existingOrder.getStatus() == OrderStatus.CANCELLED
+                    || existingOrder.getStatus() == OrderStatus.EXPIRED
+                    || (existingOrder.getStatus() == OrderStatus.PENDING && existingOrder.isExpired())) {
+                continue;
+            }
+            for (OrderItem item : existingOrder.getItems()) {
+                PurchaseLimitKey key = new PurchaseLimitKey(
+                        item.getTicketType().getEvent().getId(), isVip(item.getTicketType().getName()));
+                purchases.merge(key, (long) item.getQuantity(), Long::sum);
+            }
+        }
+        return purchases;
+    }
+
+    private boolean isVip(String ticketTypeName) {
+        return ticketTypeName.toLowerCase(Locale.ROOT).contains("vip");
+    }
+
+    private record PurchaseLimitKey(UUID eventId, boolean vip) {}
+
     @Transactional
     public OrderResponse confirmDemoPayment(UUID userId, UUID orderId) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
 
         if (!order.getUser().getId().equals(userId)) {
@@ -83,29 +132,8 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse markPaid(UUID userId, UUID orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
-        if (!order.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("No tienes permiso para confirmar esta orden");
-        }
-        return markPaid(order);
-    }
-
-    private OrderResponse markPaid(Order order) {
-        if (order.getStatus() == OrderStatus.PAID) {
-            return OrderResponse.from(order);
-        }
-        if (order.getStatus() != OrderStatus.PENDING || order.isExpired()) {
-            throw new IllegalArgumentException("La reserva ya no está pendiente o ha expirado");
-        }
-        order.setStatus(OrderStatus.PAID);
-        return OrderResponse.from(orderRepository.save(order));
-    }
-
-    @Transactional
     public Order cancelOrder(UUID orderId) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
 
         if (order.getStatus() != OrderStatus.PENDING

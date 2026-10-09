@@ -46,20 +46,39 @@ export default function useHomePage() {
     if (redirectStatus === 'succeeded' && paymentIntentId && orderId) {
       currentUrl.searchParams.delete('payment_intent_client_secret');
       window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
-      api(`/payments/confirm/${orderId}`, {
-        method: 'POST',
-        body: JSON.stringify({ paymentIntentId }),
-      })
-        .then(() => {
+      const confirmRedirectedPayment = async () => {
+        try {
+          const confirmation = await api(`/payments/confirm/${orderId}`, {
+            method: 'POST',
+            body: JSON.stringify({ paymentIntentId }),
+          });
+          if (confirmation.status !== 'PAID') {
+            let paid = false;
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+              await new Promise((resolve) => window.setTimeout(resolve, 1500));
+              const order = await api(`/orders/${orderId}`);
+              if (order.status === 'PAID') {
+                paid = true;
+                break;
+              }
+            }
+            if (!paid) {
+              setToast('Pago recibido. La confirmación del servidor puede tardar unos segundos; comprueba Mis entradas.');
+              return;
+            }
+          }
           setToast('Pago confirmado. Tu reserva está lista.');
           currentUrl.searchParams.delete('payment_intent');
           currentUrl.searchParams.delete('redirect_status');
           currentUrl.searchParams.delete('order_id');
           window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
-        })
-        .catch((requestError) => setToast(requestError.message || 'No se pudo confirmar el pago.'))
+        } catch (requestError) {
+          setToast(requestError.message || 'No se pudo confirmar el pago.');
+        }
+      };
+      void confirmRedirectedPayment();
     } else if (redirectStatus === 'succeeded') {
-      setToast('Pago confirmado. Tu reserva está lista.');
+      setToast('Pago recibido. Revisa Mis entradas para comprobar el estado de tu reserva.');
     }
     if (paymentIntentId && !(redirectStatus === 'succeeded' && orderId)) {
       currentUrl.searchParams.delete('payment_intent');

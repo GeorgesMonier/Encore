@@ -8,6 +8,8 @@ import com.encore.encoreapi.user.UserRepository;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.SetupIntent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,7 @@ import java.util.UUID;
 @RequestMapping("/api/payments")
 public class PaymentController {
 
+    private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
     private final PaymentService paymentService;
     private final OrderRepository orderRepository;
     private final OrderService orderService;
@@ -62,6 +65,7 @@ public class PaymentController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (StripeException e) {
+            log.error("Stripe PaymentIntent creation failed ({})", e.getClass().getSimpleName());
             return ResponseEntity.internalServerError().body("Error al crear el pago con Stripe");
         }
     }
@@ -90,10 +94,16 @@ public class PaymentController {
 
         try {
             paymentService.verifyPaymentIntent(order, user, request.paymentIntentId());
-            return ResponseEntity.ok(orderService.markPaid(user.getId(), orderId));
+            Order currentOrder = orderRepository.findById(orderId)
+                    .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
+            return ResponseEntity.ok(Map.of(
+                    "status", currentOrder.getStatus().name(),
+                    "paymentVerified", true
+            ));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (StripeException e) {
+            log.error("Stripe payment verification failed ({})", e.getClass().getSimpleName());
             return ResponseEntity.internalServerError().body("No se pudo verificar el pago con Stripe");
         }
     }
@@ -103,6 +113,7 @@ public class PaymentController {
         try {
             return ResponseEntity.ok(paymentService.getDefaultPaymentMethod(authenticatedUser()));
         } catch (StripeException e) {
+            log.error("Stripe payment method lookup failed ({})", e.getClass().getSimpleName());
             return ResponseEntity.internalServerError().body("No se pudo consultar el método de pago en Stripe");
         }
     }
@@ -113,6 +124,7 @@ public class PaymentController {
             SetupIntent setupIntent = paymentService.createPaymentMethodSetup(authenticatedUser());
             return ResponseEntity.ok(Map.of("clientSecret", setupIntent.getClientSecret()));
         } catch (StripeException e) {
+            log.error("Stripe SetupIntent creation failed ({})", e.getClass().getSimpleName());
             return ResponseEntity.internalServerError().body("No se pudo iniciar la verificación del método de pago en Stripe");
         }
     }
@@ -124,6 +136,7 @@ public class PaymentController {
             return ResponseEntity.ok(
                     paymentService.saveDefaultPaymentMethod(authenticatedUser(), request.setupIntentId()));
         } catch (StripeException e) {
+            log.error("Stripe payment method save failed ({})", e.getClass().getSimpleName());
             return ResponseEntity.internalServerError().body("No se pudo guardar el método de pago en Stripe");
         }
     }

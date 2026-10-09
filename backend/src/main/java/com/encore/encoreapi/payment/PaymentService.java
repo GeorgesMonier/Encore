@@ -2,6 +2,7 @@ package com.encore.encoreapi.payment;
 
 import com.encore.encoreapi.ticket.Order;
 import com.encore.encoreapi.ticket.OrderStatus;
+import com.encore.encoreapi.ticket.OrderRepository;
 import com.encore.encoreapi.user.User;
 import com.encore.encoreapi.user.UserRepository;
 import com.stripe.exception.StripeException;
@@ -9,11 +10,13 @@ import com.stripe.model.Customer;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
 import com.stripe.model.SetupIntent;
+import com.stripe.net.RequestOptions;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.SetupIntentCreateParams;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Objects;
@@ -22,27 +25,40 @@ import java.util.Objects;
 public class PaymentService {
 
     private final UserRepository userRepository;
+    private final OrderRepository orderRepository;
 
-    public PaymentService(UserRepository userRepository) {
+    public PaymentService(UserRepository userRepository, OrderRepository orderRepository) {
         this.userRepository = userRepository;
+        this.orderRepository = orderRepository;
     }
 
+    @Transactional
     public PaymentIntent createPaymentIntent(Order order, User user) throws StripeException {
-        if (order.getStatus() != OrderStatus.PENDING || order.isExpired()) {
+        Order lockedOrder = orderRepository.findByIdForUpdate(order.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
+        if (lockedOrder.getStatus() != OrderStatus.PENDING || lockedOrder.isExpired()) {
             throw new IllegalArgumentException("La reserva ya no está pendiente o ha expirado");
         }
         String customerId = getOrCreateCustomer(user);
-        // Stripe trabaja en la unidad mínima de la moneda (céntimos para EUR)
-        long amountInCents = order.getTotalAmount()
+        long amountInCents = lockedOrder.getTotalAmount()
                 .multiply(BigDecimal.valueOf(100))
                 .longValueExact();
+
+        if (lockedOrder.getStripePaymentIntentId() != null) {
+            PaymentIntent existingIntent = PaymentIntent.retrieve(lockedOrder.getStripePaymentIntentId());
+            if (!isPaymentIntentForOrder(existingIntent, lockedOrder, customerId, amountInCents)
+                    || "canceled".equals(existingIntent.getStatus())) {
+                throw new IllegalArgumentException("El intento de pago anterior no se puede reutilizar");
+            }
+            return existingIntent;
+        }
 
         PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
                 .setAmount(amountInCents)
                 .setCurrency("eur")
                 .setCustomer(customerId)
                 .setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.OFF_SESSION)
-                .putMetadata("orderId", order.getId().toString())
+                .putMetadata("orderId", lockedOrder.getId().toString())
                 .setAutomaticPaymentMethods(
                         PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
                                 .setEnabled(true)
@@ -50,7 +66,12 @@ public class PaymentService {
                 )
                 .build();
 
-        return PaymentIntent.create(params);
+        PaymentIntent intent = PaymentIntent.create(params, RequestOptions.builder()
+                .setIdempotencyKey("encore-order-" + lockedOrder.getId())
+                .build());
+        lockedOrder.setStripePaymentIntentId(intent.getId());
+        orderRepository.save(lockedOrder);
+        return intent;
     }
 
     public void verifyPaymentIntent(Order order, User user, String paymentIntentId) throws StripeException {
@@ -62,6 +83,7 @@ public class PaymentService {
         var metadata = intent.getMetadata();
 
         if (!"succeeded".equals(intent.getStatus())
+                || !Objects.equals(paymentIntentId, order.getStripePaymentIntentId())
                 || metadata == null
                 || !order.getId().toString().equals(metadata.get("orderId"))
                 || customerId == null || customerId.isBlank()
@@ -72,6 +94,16 @@ public class PaymentService {
         }
     }
 
+    private boolean isPaymentIntentForOrder(PaymentIntent intent, Order order, String customerId,
+                                            long amountInCents) {
+        return order.getId().toString().equals(
+                    intent.getMetadata() == null ? null : intent.getMetadata().get("orderId"))
+                && Objects.equals(customerId, intent.getCustomer())
+                && Objects.equals(amountInCents, intent.getAmount())
+                && Objects.equals("eur", intent.getCurrency());
+    }
+
+    @Transactional
     public SetupIntent createPaymentMethodSetup(User user) throws StripeException {
         SetupIntentCreateParams params = SetupIntentCreateParams.builder()
                 .setCustomer(getOrCreateCustomer(user))
@@ -130,18 +162,20 @@ public class PaymentService {
     }
 
     private String getOrCreateCustomer(User user) throws StripeException {
-        if (user.getStripeCustomerId() != null && !user.getStripeCustomerId().isBlank()) {
-            return user.getStripeCustomerId();
+        User lockedUser = userRepository.findByIdForUpdate(user.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        if (lockedUser.getStripeCustomerId() != null && !lockedUser.getStripeCustomerId().isBlank()) {
+            return lockedUser.getStripeCustomerId();
         }
 
         CustomerCreateParams params = CustomerCreateParams.builder()
-                .setEmail(user.getEmail())
-                .setName(user.getName())
-                .putMetadata("encoreUserId", user.getId().toString())
+                .setEmail(lockedUser.getEmail())
+                .setName(lockedUser.getName())
+                .putMetadata("encoreUserId", lockedUser.getId().toString())
                 .build();
         Customer customer = Customer.create(params);
-        user.setStripeCustomerId(customer.getId());
-        userRepository.save(user);
+        lockedUser.setStripeCustomerId(customer.getId());
+        userRepository.save(lockedUser);
         return customer.getId();
     }
 

@@ -2,6 +2,8 @@ package com.encore.encoreapi.ticket;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public class CreateOrderRequest {
@@ -14,7 +16,9 @@ public class CreateOrderRequest {
     public void setItems(List<OrderItemRequest> items) { this.items = items; }
 
     public static class OrderItemRequest {
+        @NotNull
         private java.util.UUID ticketTypeId;
+        @Min(1)
         private int quantity;
 
         public java.util.UUID getTicketTypeId() { return ticketTypeId; }

@@ -1,6 +1,8 @@
 package com.encore.encoreapi.ticket;
 
 import org.springframework.scheduling.annotation.Scheduled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,6 +12,7 @@ import java.util.List;
 @Service
 public class OrderExpirationService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderExpirationService.class);
     private final OrderRepository orderRepository;
     private final TicketTypeRepository ticketTypeRepository;
 
@@ -21,10 +24,8 @@ public class OrderExpirationService {
     @Scheduled(fixedRate = 60000) // 60 sec
     @Transactional
     public void expireOldOrders() {
-        List<Order> pendingOrders = orderRepository.findAll().stream()
-                .filter(o -> o.getStatus() == OrderStatus.PENDING)
-                .filter(Order::isExpired)
-                .toList();
+        List<Order> pendingOrders = orderRepository.findExpiredOrdersForUpdate(
+                OrderStatus.PENDING, LocalDateTime.now());
 
         for (Order order : pendingOrders) {
             for (OrderItem item : order.getItems()) {
@@ -36,7 +37,7 @@ public class OrderExpirationService {
             order.setStatus(OrderStatus.EXPIRED);
             orderRepository.save(order);
 
-            System.out.println("Orden expirada y stock liberado: " + order.getId());
+            log.info("Expired a pending order and released its reserved ticket inventory");
         }
     }
 }

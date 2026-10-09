@@ -3,6 +3,7 @@ package com.encore.encoreapi.ticket;
 import com.encore.encoreapi.event.Event;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -48,6 +49,8 @@ public class TicketType {
     public BigDecimal getPrice() { return price; }
     public int getTotalQuantity() { return totalQuantity; }
     public int getAvailableQuantity() { return availableQuantity; }
+    public int getSoldQuantity() { return totalQuantity - availableQuantity; }
+    public boolean isDemoTicket() { return name.toLowerCase(Locale.ROOT).contains("(demo)"); }
     public void setAvailableQuantity(int availableQuantity) { this.availableQuantity = availableQuantity; }
     public Long getVersion() { return version; }
     public void setName(String name) { this.name = name; }

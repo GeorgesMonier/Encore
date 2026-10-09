@@ -1,7 +1,7 @@
 package tests;
 
 import com.encore.encoreapi.payment.WebhookController;
-import com.encore.encoreapi.ticket.OrderRepository;
+import com.encore.encoreapi.payment.StripeWebhookService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -14,11 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @ExtendWith(MockitoExtension.class)
 class WebhookControllerTest {
 
-    @Mock private OrderRepository orderRepository;
+    @Mock private StripeWebhookService stripeWebhookService;
 
     @Test
     void rejectsPayloadWithInvalidSignature() {
-        WebhookController controller = new WebhookController(orderRepository);
+        WebhookController controller = new WebhookController(stripeWebhookService);
         ReflectionTestUtils.setField(controller, "webhookSecret", "whsec_test_secret");
 
         ResponseEntity<String> response = controller.handleWebhook(

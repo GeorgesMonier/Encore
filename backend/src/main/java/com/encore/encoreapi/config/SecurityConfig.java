@@ -3,17 +3,20 @@ package com.encore.encoreapi.config;
 import com.encore.encoreapi.security.JwtAuthFilter;
 import com.encore.encoreapi.security.ApiRateLimitFilter;
 import com.encore.encoreapi.security.ApiRateLimitService;
+import com.encore.encoreapi.security.ApiSecurityExceptionHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -27,16 +30,19 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final ApiRateLimitService apiRateLimitService;
+    private final ApiSecurityExceptionHandler securityExceptionHandler;
     private final List<String> allowedOrigins;
     private final boolean secureCookie;
     private final String sameSite;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter, ApiRateLimitService apiRateLimitService,
+                          ApiSecurityExceptionHandler securityExceptionHandler,
                           @Value("${app.cors.allowed-origins:http://localhost:5173}") String allowedOrigins,
                           @Value("${auth.cookie.secure:true}") boolean secureCookie,
                           @Value("${auth.cookie.same-site:Lax}") String sameSite) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.apiRateLimitService = apiRateLimitService;
+        this.securityExceptionHandler = securityExceptionHandler;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
@@ -79,6 +85,17 @@ public class SecurityConfig {
                         .csrfTokenRepository(csrfRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers("/api/payments/webhook")
+                        .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
+                            @Override
+                            public <Filter extends CsrfFilter> Filter postProcess(Filter filter) {
+                                filter.setAccessDeniedHandler(securityExceptionHandler);
+                                return filter;
+                            }
+                        })
+                )
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(securityExceptionHandler)
+                        .accessDeniedHandler(securityExceptionHandler)
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)

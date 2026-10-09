@@ -21,6 +21,7 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
   const [currentOrderId, setCurrentOrderId] = useState('');
   const [paymentError, setPaymentError] = useState('');
   const [paid, setPaid] = useState(false);
+  const [paymentPending, setPaymentPending] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -96,13 +97,31 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
 
   async function handlePaymentSuccess(paymentIntentId) {
     try {
-      await api(`/payments/confirm/${currentOrderId}`, {
+      const confirmation = await api(`/payments/confirm/${currentOrderId}`, {
         method: 'POST',
         body: JSON.stringify({ paymentIntentId }),
       });
-      setPaid(true);
-      onPaymentSuccess(false);
+      if (confirmation.status === 'PAID') {
+        setPaid(true);
+        onPaymentSuccess(false);
+        return;
+      }
+      setPaymentPending(true);
+      setClientSecret('');
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        const order = await api(`/orders/${currentOrderId}`);
+        if (order.status === 'PAID') {
+          setPaymentPending(false);
+          setPaid(true);
+          onPaymentSuccess(false);
+          return;
+        }
+      }
+      setPaymentPending(false);
+      setPaymentError('Stripe recibió el pago, pero aún esperamos la confirmación del webhook. Comprueba “Mis entradas” en unos segundos.');
     } catch (requestError) {
+      setPaymentPending(false);
       setPaymentError(requestError.message || 'No se pudo confirmar el pago.');
     }
   }
@@ -150,7 +169,10 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
             {!loading && !error && !ticketTypes.length && <p className="ticket-empty">Todavía no hay entradas disponibles para este concierto.</p>}
             {!clientSecret && !paid && ticketTypes.map((ticket) => (
               <div className="ticket-row" key={ticket.id}>
-                <div><strong>{ticket.name}</strong><span>{ticket.availableQuantity} disponibles</span></div>
+                <div>
+                  <strong>{ticket.name}</strong>
+                  <span>{ticket.availableQuantity} disponibles · {ticket.soldQuantity ?? (ticket.totalQuantity - ticket.availableQuantity)} vendidas</span>
+                </div>
                 <div className="ticket-actions">
                   <b>{formatPrice(ticket.price)}</b>
                   <div className="stepper">
@@ -176,6 +198,7 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
             )}
             {paid && <div className="paid-state">{demoMode ? 'Compra de demostración confirmada. No se ha realizado ningún cargo.' : 'Pago confirmado. Te hemos enviado la confirmación de tu pedido.'}</div>}
             {paymentError && <p className="inline-error">{paymentError}</p>}
+            {paymentPending && <p className="ticket-loading" role="status">Pago recibido por Stripe. Esperando la confirmación segura del servidor…</p>}
             {!clientSecret && !paid && !loading && !error && ticketTypes.length > 0 && (
               <div className="ticket-total">
                 {total > 0 && <div className="total-line"><span>Total</span><strong>{formatPrice(total)}</strong></div>}

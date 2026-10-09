@@ -33,6 +33,9 @@ public class Order {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 
+    @Column(unique = true)
+    private String stripePaymentIntentId;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
@@ -54,6 +57,10 @@ public class Order {
     public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getExpiresAt() { return expiresAt; }
+    public String getStripePaymentIntentId() { return stripePaymentIntentId; }
+    public void setStripePaymentIntentId(String stripePaymentIntentId) {
+        this.stripePaymentIntentId = stripePaymentIntentId;
+    }
     public List<OrderItem> getItems() { return items; }
     public void addItem(OrderItem item) {
         items.add(item);
@@ -61,6 +68,6 @@ public class Order {
     }
 
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+        return !LocalDateTime.now().isBefore(expiresAt);
     }
 }

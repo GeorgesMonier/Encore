@@ -1,29 +1,27 @@
 package com.encore.encoreapi.payment;
 
-import com.encore.encoreapi.ticket.Order;
-import com.encore.encoreapi.ticket.OrderRepository;
-import com.encore.encoreapi.ticket.OrderStatus;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.net.Webhook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/payments")
 public class WebhookController {
 
-    private final OrderRepository orderRepository;
+    private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
+    private final StripeWebhookService stripeWebhookService;
 
     @Value("${stripe.webhook.secret}")
     private String webhookSecret;
 
-    public WebhookController(OrderRepository orderRepository) {
-        this.orderRepository = orderRepository;
+    public WebhookController(StripeWebhookService stripeWebhookService) {
+        this.stripeWebhookService = stripeWebhookService;
     }
 
     @PostMapping("/webhook")
@@ -35,6 +33,7 @@ public class WebhookController {
         try {
             event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
         } catch (SignatureVerificationException e) {
+            log.warn("Stripe webhook rejected because its signature is invalid");
             return ResponseEntity.badRequest().body("Firma inválida");
         }
 
@@ -43,36 +42,13 @@ public class WebhookController {
                     .getObject()
                     .orElse(null);
 
-            if (paymentIntent != null) {
-                String orderIdStr = paymentIntent.getMetadata() == null
-                        ? null
-                        : paymentIntent.getMetadata().get("orderId");
-                if (orderIdStr != null) {
-                    Order order = parseOrderId(orderIdStr);
-                    if (order != null
-                            && order.getStatus() == OrderStatus.PENDING
-                            && !order.isExpired()
-                            && paymentIntent.getAmount() != null
-                            && paymentIntent.getAmount().equals(order.getTotalAmount()
-                                    .movePointRight(2).longValueExact())
-                            && "eur".equals(paymentIntent.getCurrency())
-                            && order.getUser().getStripeCustomerId() != null
-                            && order.getUser().getStripeCustomerId().equals(paymentIntent.getCustomer())) {
-                        order.setStatus(OrderStatus.PAID);
-                        orderRepository.save(order);
-                    }
-                }
+            if (paymentIntent == null) {
+                log.error("Verified Stripe webhook contained an unreadable PaymentIntent");
+                return ResponseEntity.badRequest().body("No se pudo leer el PaymentIntent");
             }
+            stripeWebhookService.confirmSuccessfulPayment(paymentIntent);
         }
 
         return ResponseEntity.ok("Recibido");
-    }
-
-    private Order parseOrderId(String orderId) {
-        try {
-            return orderRepository.findById(UUID.fromString(orderId)).orElse(null);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
     }
 }

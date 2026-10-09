@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
@@ -34,5 +35,17 @@ public class OrderController {
                 .map(OrderResponse::from)
                 .toList();
         return ResponseEntity.ok(orders);
+    }
+
+    @Transactional(readOnly = true)
+    @GetMapping("/{orderId}")
+    public ResponseEntity<OrderResponse> getMyOrder(@PathVariable UUID orderId) {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
+        if (!order.getUser().getId().equals(UUID.fromString(userId))) {
+            throw new AccessDeniedException("La orden no pertenece al usuario autenticado");
+        }
+        return ResponseEntity.ok(OrderResponse.from(order));
     }
 }
