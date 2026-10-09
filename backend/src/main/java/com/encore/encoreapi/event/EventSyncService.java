@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class EventSyncService {
@@ -30,7 +31,14 @@ public class EventSyncService {
 
         for (TicketmasterEventDto dto : events) {
             if (eventRepository.existsByExternalId(dto.getId())) {
-                eventRepository.findByExternalId(dto.getId()).ifPresent(demoTicketSeeder::ensureDemoTickets);
+                eventRepository.findByExternalId(dto.getId()).ifPresent(event -> {
+                    String eventTime = ticketmasterStartTime(dto);
+                    if (!Objects.equals(event.getEventTime(), eventTime)) {
+                        event.setEventTime(eventTime);
+                        eventRepository.save(event);
+                    }
+                    demoTicketSeeder.ensureDemoTickets(event);
+                });
                 continue;
             }
 
@@ -71,6 +79,7 @@ public class EventSyncService {
                     venueName,
                     cityName,
                     eventDate,
+                    ticketmasterStartTime(dto),
                     imageUrl,
                     dto.getInfo()
             );
@@ -81,6 +90,13 @@ public class EventSyncService {
         }
 
         return savedCount;
+    }
+
+    private String ticketmasterStartTime(TicketmasterEventDto dto) {
+        if (dto.getDates() == null || dto.getDates().getStart() == null) {
+            return null;
+        }
+        return dto.getDates().getStart().getLocalTime();
     }
 
 }

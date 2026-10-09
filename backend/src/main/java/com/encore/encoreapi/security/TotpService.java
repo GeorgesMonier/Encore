@@ -12,10 +12,12 @@ import dev.samstevens.totp.time.TimeProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.Base64;
+import java.util.regex.Pattern;
 
 @Service
 public class TotpService {
 
+    private static final Pattern SIX_DIGIT_CODE = Pattern.compile("[0-9]{6}");
     private final SecretGenerator secretGenerator = new DefaultSecretGenerator();
     private final QrGenerator qrGenerator = new ZxingPngQrGenerator();
     private final CodeVerifier verifier;
@@ -23,7 +25,9 @@ public class TotpService {
     public TotpService() {
         TimeProvider timeProvider = new SystemTimeProvider();
         CodeGenerator codeGenerator = new DefaultCodeGenerator();
-        this.verifier = new DefaultCodeVerifier(codeGenerator, timeProvider);
+        DefaultCodeVerifier codeVerifier = new DefaultCodeVerifier(codeGenerator, timeProvider);
+        codeVerifier.setAllowedTimePeriodDiscrepancy(1);
+        this.verifier = codeVerifier;
     }
 
     public String generateSecret() {
@@ -49,6 +53,7 @@ public class TotpService {
     }
 
     public boolean verifyCode(String secret, String code) {
-        return verifier.isValidCode(secret, code);
+        return secret != null && code != null && SIX_DIGIT_CODE.matcher(code).matches()
+                && verifier.isValidCode(secret, code);
     }
 }

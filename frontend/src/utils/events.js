@@ -32,6 +32,12 @@ export function formatDate(value) {
   }).format(date);
 }
 
+export function formatTime(value) {
+  if (typeof value !== 'string') return '';
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/.exec(value);
+  return match ? `${match[1]}:${match[2]}` : '';
+}
+
 export function formatPrice(value) {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',

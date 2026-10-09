@@ -243,7 +243,10 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
                           maxLength={6}
                           required
                           value={totpCode}
-                          onChange={(event) => setTotpCode(event.target.value)}
+                          onChange={(event) => {
+                            const nextCode = event.target.value;
+                            if (/^\d{0,6}$/.test(nextCode)) setTotpCode(nextCode);
+                          }}
                           placeholder="000000"
                         />
                       </label>

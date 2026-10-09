@@ -2,7 +2,7 @@ package com.encore.encoreapi.ticket;
 
 import com.encore.encoreapi.event.EventRepository;
 import com.encore.encoreapi.event.Event;
-import org.springframework.beans.factory.annotation.Value;
+import com.encore.encoreapi.payment.PaymentMode;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -15,27 +15,27 @@ public class DemoTicketSeeder implements ApplicationRunner {
 
     private final EventRepository eventRepository;
     private final TicketTypeRepository ticketTypeRepository;
-    private final boolean demoMode;
+    private final PaymentMode paymentMode;
 
     public DemoTicketSeeder(EventRepository eventRepository,
                             TicketTypeRepository ticketTypeRepository,
-                            @Value("${payments.demo-mode:true}") boolean demoMode) {
+                            PaymentMode paymentMode) {
         this.eventRepository = eventRepository;
         this.ticketTypeRepository = ticketTypeRepository;
-        this.demoMode = demoMode;
+        this.paymentMode = paymentMode;
     }
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (!demoMode) return;
+        if (!paymentMode.isDemoMode()) return;
 
         eventRepository.findAll().forEach(this::ensureDemoTickets);
     }
 
     @Transactional
     public void ensureDemoTickets(Event event) {
-        if (!demoMode || !ticketTypeRepository.findByEventId(event.getId()).isEmpty()) return;
+        if (!paymentMode.isDemoMode() || !ticketTypeRepository.findByEventId(event.getId()).isEmpty()) return;
         ticketTypeRepository.save(new TicketType(event, "General (demo)", new BigDecimal("45.00"), 50));
         ticketTypeRepository.save(new TicketType(event, "VIP (demo)", new BigDecimal("90.00"), 10));
     }

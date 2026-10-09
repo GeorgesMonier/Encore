@@ -26,6 +26,8 @@ public class Event {
 
     private LocalDateTime eventDate;
 
+    private String eventTime;
+
     @Column(length = 1000)
     private String imageUrl;
 
@@ -36,12 +38,18 @@ public class Event {
 
     public Event(String externalId, String name, String artist, String venue,
                  String city, LocalDateTime eventDate, String imageUrl, String description) {
+        this(externalId, name, artist, venue, city, eventDate, null, imageUrl, description);
+    }
+
+    public Event(String externalId, String name, String artist, String venue,
+                 String city, LocalDateTime eventDate, String eventTime, String imageUrl, String description) {
         this.externalId = externalId;
         this.name = name;
         this.artist = artist;
         this.venue = venue;
         this.city = city;
         this.eventDate = eventDate;
+        this.eventTime = eventTime;
         this.imageUrl = imageUrl;
         this.description = description;
     }
@@ -53,6 +61,8 @@ public class Event {
     public String getVenue() { return venue; }
     public String getCity() { return city; }
     public LocalDateTime getEventDate() { return eventDate; }
+    public String getEventTime() { return eventTime; }
+    public void setEventTime(String eventTime) { this.eventTime = eventTime; }
     public String getImageUrl() { return imageUrl; }
     public String getDescription() { return description; }
 }

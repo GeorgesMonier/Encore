@@ -52,7 +52,7 @@ El frontend se ejecutará mediante Vite y se conectará a la API configurada med
 
 ## Modo de compra demo
 
-El modo de compra demo está **activado por defecto**.
+El modo demo se activa cuando no hay una clave secreta de Stripe configurada. Si `STRIPE_API_KEY` está configurada, Stripe se activa automáticamente, salvo que `PAYMENTS_DEMO_MODE=true` fuerce el modo demo.
 
 Cuando `PAYMENTS_DEMO_MODE=true`, las compras generan órdenes y entradas de demostración sin crear `PaymentIntent` ni realizar cargos reales.
 

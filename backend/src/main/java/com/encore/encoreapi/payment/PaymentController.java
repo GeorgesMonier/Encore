@@ -11,7 +11,6 @@ import com.stripe.model.SetupIntent;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,28 +25,28 @@ public class PaymentController {
     private final OrderRepository orderRepository;
     private final OrderService orderService;
     private final UserRepository userRepository;
-    private final boolean demoMode;
+    private final PaymentMode paymentMode;
 
     public PaymentController(PaymentService paymentService,
                              OrderRepository orderRepository,
                              OrderService orderService,
                              UserRepository userRepository,
-                             @Value("${payments.demo-mode:true}") boolean demoMode) {
+                             PaymentMode paymentMode) {
         this.paymentService = paymentService;
         this.orderRepository = orderRepository;
         this.orderService = orderService;
         this.userRepository = userRepository;
-        this.demoMode = demoMode;
+        this.paymentMode = paymentMode;
     }
 
     @GetMapping("/mode")
     public Map<String, Boolean> getPaymentMode() {
-        return Map.of("demoMode", demoMode);
+        return Map.of("demoMode", paymentMode.isDemoMode());
     }
 
     @PostMapping("/create-intent/{orderId}")
     public ResponseEntity<?> createPaymentIntent(@PathVariable UUID orderId) {
-        if (demoMode) {
+        if (paymentMode.isDemoMode()) {
             return ResponseEntity.status(409).body("Los pagos de Stripe están desactivados en modo demostración");
         }
         Order order = orderRepository.findById(orderId)
@@ -69,7 +68,7 @@ public class PaymentController {
 
     @PostMapping("/demo-confirm/{orderId}")
     public ResponseEntity<?> confirmDemoPayment(@PathVariable UUID orderId) {
-        if (!demoMode) {
+        if (!paymentMode.isDemoMode()) {
             return ResponseEntity.status(404).body("Los pagos de demostración están desactivados");
         }
         return ResponseEntity.ok(orderService.confirmDemoPayment(authenticatedUser().getId(), orderId));
@@ -79,7 +78,7 @@ public class PaymentController {
     public ResponseEntity<?> confirmPayment(
             @PathVariable UUID orderId,
             @Valid @RequestBody ConfirmPaymentRequest request) {
-        if (demoMode) {
+        if (paymentMode.isDemoMode()) {
             return ResponseEntity.status(409).body("Stripe está desactivado en modo demostración");
         }
         Order order = orderRepository.findById(orderId)

@@ -11,11 +11,15 @@ public class StripeConfig {
     @Value("${stripe.api.key}")
     private String stripeApiKey;
 
-    @Value("${payments.demo-mode:true}")
-    private boolean demoMode;
+    private final PaymentMode paymentMode;
+
+    public StripeConfig(PaymentMode paymentMode) {
+        this.paymentMode = paymentMode;
+    }
 
     @PostConstruct
     public void init() {
+        boolean demoMode = paymentMode.isDemoMode();
         if (stripeApiKey != null && !stripeApiKey.isBlank()) {
             Stripe.apiKey = stripeApiKey;
         } else if (!demoMode) {

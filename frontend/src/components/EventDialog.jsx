@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { api } from '../api.js';
-import { fallbackImages, formatDate, formatPrice, optimizeImageUrl } from '../utils/events.js';
+import { fallbackImages, formatDate, formatPrice, formatTime, optimizeImageUrl } from '../utils/events.js';
 import Icon from './Icon.jsx';
 import Modal from './Modal.jsx';
 import StripeCheckout from './StripeCheckout.jsx';
@@ -120,7 +120,10 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
           <div className="dialog-cover-shade" />
           <button className="back-link" onClick={onClose}><Icon name="back" size={16} /> Volver a conciertos</button>
           <div className="dialog-title">
-            <span>{event.city || 'España'} · {formatDate(event.eventDate)}</span>
+            <span>
+              {event.city || 'España'} · {formatDate(event.eventDate)}
+              {formatTime(event.eventTime) && ` · ${formatTime(event.eventTime)}`}
+            </span>
             <h2>{event.name}</h2>
             {event.artist && <p>{event.artist}</p>}
           </div>
@@ -129,12 +132,19 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
           <div className="event-about">
             <span className="section-kicker"><span /> DETALLES DEL CONCIERTO</span>
             <h3>{event.venue || 'Sala por confirmar'}</h3>
-            <div className="event-detail-meta"><Icon name="calendar" size={17} /> {formatDate(event.eventDate)}</div>
+            <div className="event-detail-meta">
+              <Icon name="calendar" size={17} />
+              {formatDate(event.eventDate)}
+              {formatTime(event.eventTime) && ` · ${formatTime(event.eventTime)}`}
+            </div>
             {event.description && <p className="event-description">{event.description}</p>}
           </div>
           <div className="ticket-panel">
             <h3>{clientSecret ? 'Completa tu reserva' : paid ? demoMode ? '¡Compra demo lista!' : '¡Nos vemos allí!' : 'Elige tus entradas'}</h3>
             {demoMode && <p className="demo-payment-note">Entradas de demostración: los precios y el stock son ficticios. No se procesan pagos reales.</p>}
+            {demoMode === false && !stripePromise && (
+              <p className="inline-error">Falta configurar la clave pública de Stripe (VITE_STRIPE_PUBLISHABLE_KEY) para mostrar el formulario de pago.</p>
+            )}
             {loading && <div className="ticket-loading">Buscando entradas disponibles…</div>}
             {error && <p className="inline-error">{error}</p>}
             {!loading && !error && !ticketTypes.length && <p className="ticket-empty">Todavía no hay entradas disponibles para este concierto.</p>}
@@ -169,7 +179,7 @@ export default function EventDialog({ event, user, onClose, onRequestAuth, onPay
             {!clientSecret && !paid && !loading && !error && ticketTypes.length > 0 && (
               <div className="ticket-total">
                 {total > 0 && <div className="total-line"><span>Total</span><strong>{formatPrice(total)}</strong></div>}
-                <button className="button button-dark reserve-button" disabled={!selectedTickets.length || submitting || demoMode === null} onClick={() => void reserve()}>
+                <button className="button button-dark reserve-button" disabled={!selectedTickets.length || submitting || demoMode === null || (demoMode === false && !stripePromise)} onClick={() => void reserve()}>
                   {submitting ? 'Preparando tu reserva…' : !user ? 'Inicia sesión para reservar' : demoMode ? 'Confirmar compra demo' : 'Continuar al pago'}
                   {!submitting && <Icon name="arrow" size={17} />}
                 </button>

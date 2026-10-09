@@ -2,6 +2,7 @@ package tests;
 
 import com.encore.encoreapi.event.Event;
 import com.encore.encoreapi.event.EventRepository;
+import com.encore.encoreapi.payment.PaymentMode;
 import com.encore.encoreapi.ticket.DemoTicketSeeder;
 import com.encore.encoreapi.ticket.TicketType;
 import com.encore.encoreapi.ticket.TicketTypeRepository;
@@ -29,7 +30,7 @@ class DemoTicketSeederTest {
         when(eventRepository.findAll()).thenReturn(List.of(event));
         when(ticketTypeRepository.findByEventId(null)).thenReturn(List.of());
 
-        DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, true);
+        DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, new PaymentMode("true", ""));
         seeder.run(new DefaultApplicationArguments(new String[0]));
 
         ArgumentCaptor<TicketType> ticketTypes = ArgumentCaptor.forClass(TicketType.class);
@@ -41,9 +42,8 @@ class DemoTicketSeederTest {
     @Test
     void doesNotCreateFictitiousEventsWhenCatalogIsEmpty() {
         when(eventRepository.findAll()).thenReturn(List.of());
-        when(ticketTypeRepository.findByEventId(null)).thenReturn(List.of());
 
-        DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, true);
+        DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, new PaymentMode("true", ""));
         seeder.run(new DefaultApplicationArguments(new String[0]));
 
         verify(eventRepository, never()).saveAll(any());
@@ -52,7 +52,7 @@ class DemoTicketSeederTest {
 
     @Test
     void createsNoSampleInventoryWhenDemoModeIsDisabled() {
-        DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, false);
+        DemoTicketSeeder seeder = new DemoTicketSeeder(eventRepository, ticketTypeRepository, new PaymentMode("false", "sk_test_key"));
 
         seeder.run(new DefaultApplicationArguments(new String[0]));
 

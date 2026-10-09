@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fallbackImages, formatDate, optimizeImageUrl } from '../utils/events.js';
+import { fallbackImages, formatDate, formatTime, optimizeImageUrl } from '../utils/events.js';
 import Icon from './Icon.jsx';
 
 export default function EventCard({ event, index, onClick }) {
@@ -19,7 +19,10 @@ export default function EventCard({ event, index, onClick }) {
           height="480"
           onError={() => setImageFailed(true)}
         />
-        <span className="card-date">{formatDate(event.eventDate)}</span>
+        <span className="card-date">
+          {formatDate(event.eventDate)}
+          {formatTime(event.eventTime) && ` · ${formatTime(event.eventTime)}`}
+        </span>
         <span className="card-image-shade" />
         <span className="card-city">{event.city || 'España'}</span>
         <span className="card-open"><Icon name="arrow" size={18} /></span>
