@@ -3,6 +3,7 @@ package com.encore.encoreapi.security;
 import com.encore.encoreapi.user.*;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,7 +27,7 @@ public class AuthController {
 
     public AuthController(UserService userService, UserRepository userRepository, JwtService jwtService,
                           @Value("${auth.cookie.secure:true}") boolean secureCookie,
-                          @Value("${auth.cookie.same-site:Lax}") String sameSite) {
+                          @Value("${auth.cookie.same-site:None}") String sameSite) {
         this.userService = userService;
         this.userRepository = userRepository;
         this.jwtService = jwtService;
@@ -90,8 +91,10 @@ public class AuthController {
     }
 
     @GetMapping("/csrf")
-    public Map<String, String> csrf(CsrfToken csrfToken) {
-        return Map.of("token", csrfToken.getToken());
+    public ResponseEntity<Map<String, String>> csrf(CsrfToken csrfToken) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(Map.of("token", csrfToken.getToken()));
     }
 
     @PostMapping("/logout")

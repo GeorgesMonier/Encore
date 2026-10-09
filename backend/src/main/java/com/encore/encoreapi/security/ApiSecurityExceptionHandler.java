@@ -31,7 +31,7 @@ public class ApiSecurityExceptionHandler implements AuthenticationEntryPoint, Ac
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException exception) throws IOException {
         log.warn("Authentication required for {} {}", request.getMethod(), request.getRequestURI());
-        writeError(response, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
+        writeError(response, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "authentication_required",
                 "Inicia sesión para continuar.");
     }
 
@@ -39,23 +39,27 @@ public class ApiSecurityExceptionHandler implements AuthenticationEntryPoint, Ac
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        AccessDeniedException exception) throws IOException {
         String cause;
+        String code;
         String message;
         if (exception instanceof MissingCsrfTokenException) {
             cause = "csrf_missing";
+            code = cause;
             message = "Falta el token CSRF. Recarga la página e inténtalo de nuevo.";
         } else if (exception instanceof InvalidCsrfTokenException) {
             cause = "csrf_invalid";
+            code = cause;
             message = "El token CSRF no es válido. Recarga la página e inténtalo de nuevo.";
         } else {
             cause = "access_denied";
+            code = cause;
             message = "No tienes permiso para realizar esta operación.";
         }
         log.warn("Request rejected with HTTP 403: {} {} cause={}",
                 request.getMethod(), request.getRequestURI(), cause);
-        writeError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden", message);
+        writeError(response, HttpServletResponse.SC_FORBIDDEN, "Forbidden", code, message);
     }
 
-    private void writeError(HttpServletResponse response, int status, String error, String message)
+    private void writeError(HttpServletResponse response, int status, String error, String code, String message)
             throws IOException {
         response.setStatus(status);
         response.setContentType("application/json");
@@ -64,6 +68,7 @@ public class ApiSecurityExceptionHandler implements AuthenticationEntryPoint, Ac
         objectMapper.writeValue(response.getOutputStream(), Map.of(
                 "status", status,
                 "error", error,
+                "code", code,
                 "message", message,
                 "timestamp", Instant.now().toString()
         ));

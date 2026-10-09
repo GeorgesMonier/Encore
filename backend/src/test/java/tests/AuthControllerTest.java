@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.csrf.DefaultCsrfToken;
 
 import java.time.Duration;
 import java.util.Map;
@@ -62,5 +63,23 @@ class AuthControllerTest {
         assertTrue(cookie.contains("Path=/api"));
         assertFalse(response.getBody().toString().contains("secret-access-token"));
         assertFalse(((Map<?, ?>) response.getBody()).containsKey("token"));
+    }
+
+    @Test
+    void supportsSecureCrossSiteSessionCookiesAndDoesNotCacheCsrfTokens() {
+        AuthController controller = new AuthController(userService, userRepository, jwtService, true, "None");
+        ResponseEntity<Map<String, String>> csrfResponse =
+                controller.csrf(new DefaultCsrfToken("X-XSRF-TOKEN", "_csrf", "csrf-value"));
+
+        assertEquals("no-store", csrfResponse.getHeaders().getCacheControl());
+        assertEquals("csrf-value", csrfResponse.getBody().get("token"));
+
+        when(userService.login(org.mockito.ArgumentMatchers.any(LoginRequest.class)))
+                .thenReturn(new LoginResponse("secret-access-token", "buyer@example.test", "Buyer"));
+        when(jwtService.getExpiration()).thenReturn(Duration.ofHours(24));
+        ResponseEntity<?> loginResponse = controller.login(new LoginRequest());
+
+        assertTrue(loginResponse.getHeaders().getFirst(HttpHeaders.SET_COOKIE).contains("SameSite=None"));
+        assertTrue(loginResponse.getHeaders().getFirst(HttpHeaders.SET_COOKIE).contains("Secure"));
     }
 }

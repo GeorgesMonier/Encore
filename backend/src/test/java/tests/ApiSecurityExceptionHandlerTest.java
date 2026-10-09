@@ -28,6 +28,7 @@ class ApiSecurityExceptionHandlerTest {
 
         assertEquals(401, response.getStatus());
         assertTrue(response.getContentAsString().contains("Inicia sesión"));
+        assertTrue(response.getContentAsString().contains("\"code\":\"authentication_required\""));
         assertFalse(response.getContentAsString().contains("sensitive-token"));
     }
 
@@ -40,6 +41,7 @@ class ApiSecurityExceptionHandlerTest {
 
         assertEquals(403, response.getStatus());
         assertTrue(response.getContentAsString().contains("Falta el token CSRF"));
+        assertTrue(response.getContentAsString().contains("\"code\":\"csrf_missing\""));
     }
 
     @Test
@@ -54,7 +56,9 @@ class ApiSecurityExceptionHandlerTest {
 
         assertEquals(403, csrfResponse.getStatus());
         assertTrue(csrfResponse.getContentAsString().contains("token CSRF no es válido"));
+        assertTrue(csrfResponse.getContentAsString().contains("\"code\":\"csrf_invalid\""));
         assertEquals(403, accessResponse.getStatus());
         assertTrue(accessResponse.getContentAsString().contains("No tienes permiso"));
+        assertTrue(accessResponse.getContentAsString().contains("\"code\":\"access_denied\""));
     }
 }

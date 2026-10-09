@@ -39,7 +39,7 @@ public class SecurityConfig {
                           ApiSecurityExceptionHandler securityExceptionHandler,
                           @Value("${app.cors.allowed-origins:http://localhost:5173}") String allowedOrigins,
                           @Value("${auth.cookie.secure:true}") boolean secureCookie,
-                          @Value("${auth.cookie.same-site:Lax}") String sameSite) {
+                          @Value("${auth.cookie.same-site:None}") String sameSite) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.apiRateLimitService = apiRateLimitService;
         this.securityExceptionHandler = securityExceptionHandler;
@@ -49,6 +49,9 @@ public class SecurityConfig {
                 .toList();
         this.secureCookie = secureCookie;
         this.sameSite = sameSite;
+        if ("None".equalsIgnoreCase(sameSite) && !secureCookie) {
+            throw new IllegalArgumentException("SameSite=None requiere AUTH_COOKIE_SECURE=true");
+        }
     }
 
     @Bean
