@@ -6,8 +6,8 @@ import useSession from './useSession.js';
 
 export default function useHomePage() {
   const [query, setQuery] = useState('');
-  const [city, setCity] = useState('Barcelona');
-  const [cities, setCities] = useState(['Barcelona']);
+  const [city, setCity] = useState('');
+  const [cities, setCities] = useState([]);
   const [citiesError, setCitiesError] = useState('');
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
   const { events, loading: requestLoading, error, reloadEvents } = useEvents({ city, search: debouncedQuery });
@@ -23,9 +23,9 @@ export default function useHomePage() {
     try {
       const result = await api('/events/cities');
       if (!Array.isArray(result)) throw new Error('La API devolvió una lista de ciudades no válida.');
-      const cityNames = ['Barcelona', ...result
+      const cityNames = result
         .filter((name) => typeof name === 'string' && name.trim())
-        .map((name) => name.trim())];
+        .map((name) => name.trim());
       const uniqueCities = [...new Map(cityNames.map((name) => [name.toLocaleLowerCase('es'), name])).values()];
       setCities(uniqueCities.sort((a, b) => a.localeCompare(b, 'es')));
     } catch (requestError) {

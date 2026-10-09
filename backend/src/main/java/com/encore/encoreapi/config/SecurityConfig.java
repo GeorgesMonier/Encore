@@ -86,6 +86,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/me").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login/totp").permitAll()
+                        .requestMatchers("/api/auth/totp/**").authenticated()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/support/**").permitAll()
 

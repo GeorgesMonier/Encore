@@ -16,6 +16,11 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
   const [authOpen, setAuthOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(null);
   const [paymentModeError, setPaymentModeError] = useState('');
+  const [totpSetup, setTotpSetup] = useState(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpMessage, setTotpMessage] = useState('');
+  const [totpError, setTotpError] = useState('');
+  const [totpBusy, setTotpBusy] = useState(false);
   const profileLoadVersion = useRef(0);
 
   const loadProfile = useCallback(async () => {
@@ -98,10 +103,49 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
     }
   }
 
+  async function startTotpSetup() {
+    setTotpBusy(true);
+    setTotpError('');
+    setTotpMessage('');
+    try {
+      const setup = await api('/auth/totp/setup', { method: 'POST' });
+      if (!setup?.qrCodeImage || !setup?.secret) {
+        throw new Error('La API devolvió datos de configuración 2FA no válidos.');
+      }
+      setTotpSetup(setup);
+      setTotpCode('');
+    } catch (requestError) {
+      setTotpError(requestError.message || 'No se pudo iniciar la configuración 2FA.');
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function confirmTotp(event) {
+    event.preventDefault();
+    setTotpBusy(true);
+    setTotpError('');
+    setTotpMessage('');
+    try {
+      await api('/auth/totp/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ code: totpCode }),
+      });
+      setTotpSetup(null);
+      setTotpCode('');
+      setProfile((current) => current ? { ...current, totpEnabled: true } : current);
+      setTotpMessage('La verificación en dos pasos está activada.');
+    } catch (requestError) {
+      setTotpError(requestError.message || 'No se pudo verificar el código.');
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
   return (
     <>
       <Header
-        city="Barcelona"
+        city="Todos los lugares"
         user={profile}
         onLoginClick={() => setAuthOpen(true)}
         theme={theme}
@@ -169,6 +213,60 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
                     </button>
                   </div>
                 </form>
+              </section>
+
+              <section className="profile-card">
+                <div className="profile-card-heading">
+                  <div><span className="section-kicker"><span /> SEGURIDAD</span><h2>Verificación en dos pasos</h2></div>
+                  <Icon name="user" size={21} />
+                </div>
+                {profile.totpEnabled ? (
+                  <p className="profile-form-actions">
+                    <span>La verificación en dos pasos está activada para tu cuenta.</span>
+                  </p>
+                ) : totpSetup ? (
+                  <div className="profile-totp-setup">
+                    <p>Escanea este código QR con Google Authenticator, Microsoft Authenticator o una aplicación compatible. Después introduce el código de seis dígitos para confirmar.</p>
+                    <img
+                      className="profile-totp-qr"
+                      src={`data:image/png;base64,${totpSetup.qrCodeImage}`}
+                      alt="Código QR para configurar la verificación en dos pasos"
+                    />
+                    <p className="profile-totp-secret">Si no puedes escanearlo, introduce esta clave manualmente: <code>{totpSetup.secret}</code></p>
+                    <form className="profile-form" onSubmit={(event) => void confirmTotp(event)}>
+                      <label htmlFor="totp-confirm-code">Código de verificación
+                        <input
+                          id="totp-confirm-code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          pattern="[0-9]{6}"
+                          maxLength={6}
+                          required
+                          value={totpCode}
+                          onChange={(event) => setTotpCode(event.target.value)}
+                          placeholder="000000"
+                        />
+                      </label>
+                      <div className="profile-form-actions">
+                        <button className="button button-dark" disabled={totpBusy || totpCode.length !== 6}>
+                          {totpBusy ? 'Verificando…' : 'Confirmar y activar'}
+                        </button>
+                        <button className="cancel-payment-setup" type="button" disabled={totpBusy} onClick={() => { setTotpSetup(null); setTotpCode(''); }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                ) : (
+                  <>
+                    <p className="profile-totp-description">Añade un código temporal de tu aplicación de autenticación al iniciar sesión para proteger mejor tu cuenta.</p>
+                    <button className="button button-dark" disabled={totpBusy} onClick={() => void startTotpSetup()}>
+                      {totpBusy ? 'Preparando…' : 'Configurar con código QR'}
+                    </button>
+                  </>
+                )}
+                {totpMessage && <p className="profile-save-message" role="status">{totpMessage}</p>}
+                {totpError && <p className="inline-error" role="alert">{totpError}</p>}
               </section>
 
               {demoMode === true

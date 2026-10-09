@@ -265,6 +265,10 @@
 .field-help { color: #85899a; font-size: 9px; font-weight: 400; }
 .profile-form-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 13px; border-top: 1px solid var(--line); padding-top: 15px; }
 .profile-form-actions > span, .payment-hint { color: #737789; font-size: 10px; line-height: 1.7; }
+.profile-totp-description, .profile-totp-setup > p { max-width: 620px; color: #737789; font-size: 11px; line-height: 1.7; }
+.profile-totp-qr { display: block; width: 190px; height: 190px; margin: 18px 0; border: 1px solid var(--line); background: #fff; padding: 8px; }
+.profile-totp-secret code { display: inline-block; margin: 5px 0; padding: 6px 8px; background: #f0f1f7; color: var(--ink); font-size: 11px; overflow-wrap: anywhere; }
+.profile-totp-setup .profile-form { margin-top: 18px; }
 .profile-save-message { margin: 0; color: #294be8; font-size: 10px; }
 .saved-card { display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); padding: 13px; }
 .saved-card-brand { display: grid; place-items: center; width: 40px; height: 40px; background: var(--yellow); color: var(--blue); }

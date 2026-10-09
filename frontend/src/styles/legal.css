@@ -81,6 +81,7 @@
 
 [data-theme='dark'] .profile-form input[readonly],
 [data-theme='dark'] .legal-draft-notice,
+[data-theme='dark'] .profile-totp-secret code,
 [data-theme='dark'] .support-messages {
   background: #242a3b;
   color: #e3e6f1;
@@ -112,6 +113,8 @@
 [data-theme='dark'] .field-help,
 [data-theme='dark'] .payment-hint,
 [data-theme='dark'] .profile-form-actions > span,
+[data-theme='dark'] .profile-totp-description,
+[data-theme='dark'] .profile-totp-setup > p,
 [data-theme='dark'] .legal-page > p,
 [data-theme='dark'] .cookie-copy p,
 [data-theme='dark'] .cookie-settings > p,
