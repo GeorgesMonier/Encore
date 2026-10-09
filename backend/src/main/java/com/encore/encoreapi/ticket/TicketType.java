@@ -3,6 +3,7 @@ package com.encore.encoreapi.ticket;
 import com.encore.encoreapi.event.Event;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.util.UUID;
 import org.hibernate.annotations.Check;
 
@@ -58,10 +59,18 @@ public class TicketType {
         this.event = event;
         this.name = name;
         this.category = category;
-        this.currency = currency;
+        this.currency = normalizeCurrency(currency);
         this.price = price;
         this.totalQuantity = totalQuantity;
         this.availableQuantity = totalQuantity;
+    }
+
+    public static String normalizeCurrency(String currency) {
+        String normalized = currency == null ? "EUR" : currency.trim();
+        if (normalized.isEmpty()) {
+            return "EUR";
+        }
+        return normalized.toUpperCase(Locale.ROOT);
     }
 
     public UUID getId() { return id; }
@@ -92,7 +101,7 @@ public class TicketType {
     public Long getVersion() { return version; }
     public void setName(String name) { this.name = name; }
     public void setPrice(BigDecimal price) { this.price = price; }
-    public void setCurrency(String currency) { this.currency = currency; }
+    public void setCurrency(String currency) { this.currency = normalizeCurrency(currency); }
 
     public void reserve(int quantity) {
         if (quantity < 1 || availableQuantity < quantity) {

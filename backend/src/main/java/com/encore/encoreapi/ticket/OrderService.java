@@ -93,7 +93,7 @@ public class OrderService {
                         "El límite es de " + limit + " entradas " + type + " por usuario y concierto");
             }
 
-            if (currency != null && !currency.equals(ticketType.getCurrency())) {
+            if (currency != null && !currency.equalsIgnoreCase(ticketType.getCurrency())) {
                 throw new IllegalArgumentException("Todas las entradas de una orden deben usar la misma moneda");
             }
             currency = ticketType.getCurrency();

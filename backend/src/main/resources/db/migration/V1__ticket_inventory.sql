@@ -28,7 +28,12 @@ BEGIN
             WHEN lower(name) LIKE '%vip%' THEN 'VIP'
             ELSE 'NORMAL'
         END,
-        currency = upper(coalesce(nullif(currency, ''), 'EUR'));
+        currency = upper(btrim(coalesce(nullif(currency, ''), 'EUR')));
+
+        IF to_regclass(current_schema() || '.orders') IS NOT NULL THEN
+            UPDATE orders
+            SET currency = upper(btrim(coalesce(nullif(currency, ''), 'EUR')));
+        END IF;
 
         IF to_regclass(current_schema() || '.orders') IS NOT NULL
                 AND to_regclass(current_schema() || '.order_items') IS NOT NULL THEN

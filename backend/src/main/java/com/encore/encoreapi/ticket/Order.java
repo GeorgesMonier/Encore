@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -64,7 +65,14 @@ public class Order {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
     public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
+    public void setCurrency(String currency) { this.currency = normalizeCurrency(currency); }
+    public static String normalizeCurrency(String currency) {
+        String normalized = currency == null ? "EUR" : currency.trim();
+        if (normalized.isEmpty()) {
+            return "EUR";
+        }
+        return normalized.toUpperCase(Locale.ROOT);
+    }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getExpiresAt() { return expiresAt; }
     public String getStripePaymentIntentId() { return stripePaymentIntentId; }

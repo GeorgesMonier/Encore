@@ -54,7 +54,7 @@ public class TicketTypeController {
         TicketCategory category = request.getCategory() == null
                 ? TicketCategory.fromLegacyName(request.getName())
                 : request.getCategory();
-        String currency = request.getCurrency() == null ? "EUR" : request.getCurrency();
+        String currency = request.getCurrency() == null ? "EUR" : TicketType.normalizeCurrency(request.getCurrency());
         StripeCurrency.toMinorUnits(request.getPrice(), currency);
         TicketType ticketType = new TicketType(
                 event, request.getName(), category, currency, request.getPrice(), request.getQuantity());
@@ -102,7 +102,7 @@ public class TicketTypeController {
         if (request.getName() != null) {
             ticketType.setName(request.getName());
         }
-        String currency = request.getCurrency() == null ? ticketType.getCurrency() : request.getCurrency();
+        String currency = request.getCurrency() == null ? ticketType.getCurrency() : TicketType.normalizeCurrency(request.getCurrency());
         BigDecimal price = request.getPrice() == null ? ticketType.getPrice() : request.getPrice();
         StripeCurrency.toMinorUnits(price, currency);
         if (request.getPrice() != null) {

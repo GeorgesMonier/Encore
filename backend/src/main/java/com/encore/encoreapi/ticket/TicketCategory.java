@@ -7,6 +7,10 @@ public enum TicketCategory {
     VIP;
 
     public static TicketCategory fromLegacyName(String name) {
-        return name != null && name.toLowerCase(Locale.ROOT).contains("vip") ? VIP : NORMAL;
+        if (name == null) {
+            return NORMAL;
+        }
+        String normalizedName = name.trim();
+        return normalizedName.toLowerCase(Locale.ROOT).contains("vip") ? VIP : NORMAL;
     }
 }

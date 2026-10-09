@@ -14,7 +14,7 @@ public final class StripeCurrency {
     public static long toMinorUnits(BigDecimal amount, String currencyCode) {
         int fractionDigits;
         try {
-            String normalizedCurrency = currencyCode.toUpperCase(Locale.ROOT);
+            String normalizedCurrency = currencyCode == null ? "" : currencyCode.trim().toUpperCase(Locale.ROOT);
             fractionDigits = TWO_DECIMAL_ZERO_UNIT_STRIPE_CURRENCIES.contains(normalizedCurrency)
                     ? 2 : Currency.getInstance(normalizedCurrency).getDefaultFractionDigits();
         } catch (IllegalArgumentException exception) {
