@@ -32,9 +32,17 @@ public class OrderController {
     public ResponseEntity<List<OrderResponse>> myOrders() {
         String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         List<OrderResponse> orders = orderRepository.findByUserId(UUID.fromString(userId)).stream()
+                .filter(order -> !order.isHiddenFromHistory())
                 .map(OrderResponse::from)
                 .toList();
         return ResponseEntity.ok(orders);
+    }
+
+    @DeleteMapping("/{orderId}")
+    public ResponseEntity<Void> removeMyOrderFromHistory(@PathVariable UUID orderId) {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        orderService.removeOrderFromHistory(UUID.fromString(userId), orderId);
+        return ResponseEntity.noContent().build();
     }
 
     @Transactional(readOnly = true)

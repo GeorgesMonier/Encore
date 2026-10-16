@@ -172,6 +172,53 @@ class OrderServiceTest {
     }
 
     @Test
+    void removesPendingOrdersAndReleasesTheirReservedInventory() {
+        UUID orderId = UUID.randomUUID();
+        Order order = new Order(user, new BigDecimal("80.00"));
+        ReflectionTestUtils.setField(order, "id", orderId);
+        order.addItem(new OrderItem(ticketType, 2, ticketType.getPrice()));
+        ticketType.reserve(2);
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        orderService.removeOrderFromHistory(userId, orderId);
+
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        assertTrue(order.isHiddenFromHistory());
+        assertEquals(10, ticketType.getAvailableQuantity());
+        assertEquals(0, ticketType.getReservedQuantity());
+        verify(ticketTypeRepository).save(ticketType);
+        verify(stripeRefundService, never()).refundPaymentIntent(anyString());
+    }
+
+    @Test
+    void doesNotRemoveAnotherUsersOrder() {
+        UUID orderId = UUID.randomUUID();
+        Order order = new Order(new User("other@test.com", "hashed", "Other"), BigDecimal.ONE);
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        assertThrows(IllegalArgumentException.class, () -> orderService.removeOrderFromHistory(userId, orderId));
+
+        verify(ticketTypeRepository, never()).save(any(TicketType.class));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void removesPaidOrdersFromHistoryWithoutCancellingOrRefundingThem() {
+        UUID orderId = UUID.randomUUID();
+        Order order = new Order(user, BigDecimal.ONE);
+        order.setStatus(OrderStatus.PAID);
+        when(orderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        orderService.removeOrderFromHistory(userId, orderId);
+
+        assertTrue(order.isHiddenFromHistory());
+        assertEquals(OrderStatus.PAID, order.getStatus());
+        verify(stripeRefundService, never()).refundPaymentIntent(anyString());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
     void enforcesGeneralTicketLimitAcrossOrders() {
         Order previousOrder = previousOrder(OrderStatus.PAID, "General", 8);
         when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));

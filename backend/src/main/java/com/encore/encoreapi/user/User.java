@@ -2,6 +2,7 @@ package com.encore.encoreapi.user;
 
 import com.encore.encoreapi.config.Role;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -37,6 +38,9 @@ public class User {
     @Column(nullable = false)
     private boolean totpEnabled = false;
 
+    @Column
+    private LocalDateTime deletionRequestedAt;
+
     public User() {}
 
     public User(String email, String password, String name) {
@@ -62,4 +66,8 @@ public class User {
     public void setStripeCustomerId(String stripeCustomerId) { this.stripeCustomerId = stripeCustomerId; }
     public boolean isTotpEnabled() { return totpEnabled; }
     public void setTotpEnabled(boolean totpEnabled) { this.totpEnabled = totpEnabled; }
+    public LocalDateTime getDeletionRequestedAt() { return deletionRequestedAt; }
+    public void setDeletionRequestedAt(LocalDateTime deletionRequestedAt) {
+        this.deletionRequestedAt = deletionRequestedAt;
+    }
 }

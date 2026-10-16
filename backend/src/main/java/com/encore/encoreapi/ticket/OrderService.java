@@ -40,6 +40,9 @@ public class OrderService {
     public Order createOrder(UUID userId, CreateOrderRequest request) {
         User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        if (user.getDeletionRequestedAt() != null) {
+            throw new IllegalArgumentException("Cancela la eliminación de tu cuenta antes de reservar entradas");
+        }
 
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new IllegalArgumentException("Selecciona al menos una entrada");
@@ -144,6 +147,45 @@ public class OrderService {
     }
 
     private record PurchaseLimitKey(UUID eventId, TicketCategory category) {}
+
+    @Transactional
+    public void removeOrderFromHistory(UUID userId, UUID orderId) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada"));
+        if (order.getUser() == null || !userId.equals(order.getUser().getId())) {
+            throw new IllegalArgumentException("Orden no encontrada");
+        }
+        if (order.isHiddenFromHistory()) {
+            return;
+        }
+
+        if (order.getStatus() == OrderStatus.PENDING) {
+            cancelPendingReservation(order);
+        }
+        order.setHiddenFromHistory(true);
+        orderRepository.save(order);
+    }
+
+    @Transactional
+    public void cancelPendingOrders(UUID userId) {
+        for (Order order : orderRepository.findByUserId(userId)) {
+            orderRepository.findByIdForUpdate(order.getId())
+                    .filter(lockedOrder -> lockedOrder.getStatus() == OrderStatus.PENDING)
+                    .ifPresent(lockedOrder -> {
+                        cancelPendingReservation(lockedOrder);
+                        orderRepository.save(lockedOrder);
+                    });
+        }
+    }
+
+    private void cancelPendingReservation(Order order) {
+        for (OrderItem item : order.getItems()) {
+            TicketType ticketType = item.getTicketType();
+            ticketType.releaseReservation(item.getQuantity());
+            ticketTypeRepository.save(ticketType);
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+    }
 
     @Transactional
     public OrderResponse confirmDemoPayment(UUID userId, UUID orderId) {

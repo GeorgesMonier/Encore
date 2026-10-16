@@ -45,6 +45,9 @@ public class Order {
     @Column
     private UUID idempotencyKey;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean hiddenFromHistory;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
@@ -81,6 +84,8 @@ public class Order {
     }
     public UUID getIdempotencyKey() { return idempotencyKey; }
     public void setIdempotencyKey(UUID idempotencyKey) { this.idempotencyKey = idempotencyKey; }
+    public boolean isHiddenFromHistory() { return hiddenFromHistory; }
+    public void setHiddenFromHistory(boolean hiddenFromHistory) { this.hiddenFromHistory = hiddenFromHistory; }
     public List<OrderItem> getItems() { return items; }
     public void addItem(OrderItem item) {
         items.add(item);

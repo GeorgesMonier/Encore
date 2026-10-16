@@ -3,6 +3,7 @@ package tests;
 import com.encore.encoreapi.security.JwtService;
 import com.encore.encoreapi.security.LoginAttemptService;
 import com.encore.encoreapi.security.TotpService;
+import com.encore.encoreapi.ticket.OrderService;
 import com.encore.encoreapi.user.User;
 import com.encore.encoreapi.user.UserRepository;
 import com.encore.encoreapi.user.UserService;
@@ -16,6 +17,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -28,6 +30,7 @@ class UserServiceTotpTest {
     @Mock private JwtService jwtService;
     @Mock private TotpService totpService;
     @Mock private LoginAttemptService loginAttemptService;
+    @Mock private OrderService orderService;
 
     @InjectMocks
     private UserService userService;
@@ -76,6 +79,47 @@ class UserServiceTotpTest {
         assertThrows(IllegalArgumentException.class, () -> userService.confirmTotp(userId, "000000"));
 
         assertFalse(user.isTotpEnabled());
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void schedulesAccountDeletionAndCancelsPendingReservations() {
+        UUID userId = UUID.randomUUID();
+        User user = new User("buyer@test.com", "hashed", "Buyer");
+        ReflectionTestUtils.setField(user, "id", userId);
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        User scheduled = userService.requestAccountDeletion(userId);
+
+        assertNotNull(scheduled.getDeletionRequestedAt());
+        verify(orderService).cancelPendingOrders(userId);
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void cancelsScheduledAccountDeletion() {
+        UUID userId = UUID.randomUUID();
+        User user = new User("buyer@test.com", "hashed", "Buyer");
+        user.setDeletionRequestedAt(LocalDateTime.now());
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        User restored = userService.cancelAccountDeletion(userId);
+
+        assertNull(restored.getDeletionRequestedAt());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void cannotCancelAccountDeletionAfterTheFourteenDayWindow() {
+        UUID userId = UUID.randomUUID();
+        User user = new User("buyer@test.com", "hashed", "Buyer");
+        user.setDeletionRequestedAt(LocalDateTime.now().minusDays(15));
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+
+        assertThrows(IllegalArgumentException.class, () -> userService.cancelAccountDeletion(userId));
+
         verify(userRepository, never()).save(user);
     }
 }

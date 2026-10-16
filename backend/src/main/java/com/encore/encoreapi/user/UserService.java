@@ -4,10 +4,12 @@ import com.encore.encoreapi.security.JwtService;
 import com.encore.encoreapi.security.TotpService;
 import com.encore.encoreapi.security.TotpSetupResponse;
 import com.encore.encoreapi.security.LoginAttemptService;
+import com.encore.encoreapi.ticket.OrderService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -18,17 +20,20 @@ public class UserService {
     private final JwtService jwtService;
     private final TotpService totpService;
     private final LoginAttemptService loginAttemptService;
+    private final OrderService orderService;
 
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        TotpService totpService,
-                       LoginAttemptService loginAttemptService) {
+                       LoginAttemptService loginAttemptService,
+                       OrderService orderService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.totpService = totpService;
         this.loginAttemptService = loginAttemptService;
+        this.orderService = orderService;
     }
 
     @Transactional
@@ -129,6 +134,30 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         user.setName(name.strip());
+        return userRepository.save(user);
+    }
+
+    @Transactional
+    public User requestAccountDeletion(UUID userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        if (user.getDeletionRequestedAt() == null) {
+            orderService.cancelPendingOrders(userId);
+            user.setDeletionRequestedAt(LocalDateTime.now());
+            userRepository.save(user);
+        }
+        return user;
+    }
+
+    @Transactional
+    public User cancelAccountDeletion(UUID userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        if (user.getDeletionRequestedAt() != null
+                && !LocalDateTime.now().isBefore(user.getDeletionRequestedAt().plusDays(14))) {
+            throw new IllegalArgumentException("El plazo para cancelar la eliminación de la cuenta ha vencido");
+        }
+        user.setDeletionRequestedAt(null);
         return userRepository.save(user);
     }
 }

@@ -21,6 +21,9 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
   const [totpMessage, setTotpMessage] = useState('');
   const [totpError, setTotpError] = useState('');
   const [totpBusy, setTotpBusy] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountMessage, setAccountMessage] = useState('');
+  const [accountError, setAccountError] = useState('');
   const profileLoadVersion = useRef(0);
 
   const loadProfile = useCallback(async () => {
@@ -100,6 +103,39 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
       setProfile(null);
     } catch (requestError) {
       setPageError(requestError.message || 'No se pudo cerrar la sesión.');
+    }
+  }
+
+  async function requestAccountDeletion() {
+    if (!window.confirm('¿Quieres programar la eliminación de tu cuenta? Se eliminará definitivamente dentro de 14 días y podrás cancelarla antes.')) {
+      return;
+    }
+    setAccountBusy(true);
+    setAccountError('');
+    setAccountMessage('');
+    try {
+      const updatedProfile = await api('/auth/me', { method: 'DELETE' });
+      setProfile(updatedProfile);
+      setAccountMessage('La eliminación de tu cuenta está programada.');
+    } catch (requestError) {
+      setAccountError(requestError.message || 'No se pudo programar la eliminación de la cuenta.');
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
+  async function cancelAccountDeletion() {
+    setAccountBusy(true);
+    setAccountError('');
+    setAccountMessage('');
+    try {
+      const updatedProfile = await api('/auth/me/cancel-deletion', { method: 'POST' });
+      setProfile(updatedProfile);
+      setAccountMessage('Se ha cancelado la eliminación de tu cuenta.');
+    } catch (requestError) {
+      setAccountError(requestError.message || 'No se pudo cancelar la eliminación de la cuenta.');
+    } finally {
+      setAccountBusy(false);
     }
   }
 
@@ -278,6 +314,35 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
                   ? <PaymentMethodSettings />
                   : <p className="inline-error" role="alert">{paymentModeError || 'Consultando configuración de pagos…'}</p>}
 
+              <section className="profile-card account-deletion-card">
+                <div className="profile-card-heading">
+                  <div><span className="section-kicker"><span /> GESTIÓN DE LA CUENTA</span><h2>Eliminar cuenta</h2></div>
+                  <Icon name="user" size={21} />
+                </div>
+                {profile.deletionScheduledAt ? (
+                  <>
+                    <p className="account-deletion-notice" role="status">
+                      Tu cuenta se eliminará definitivamente el {formatDeletionDate(profile.deletionScheduledAt)}.
+                      Puedes cancelar la solicitud antes de esa fecha.
+                    </p>
+                    <button className="button button-dark" disabled={accountBusy} onClick={() => void cancelAccountDeletion()}>
+                      {accountBusy ? 'Actualizando…' : 'Cancelar eliminación'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="account-deletion-description">
+                      La eliminación es definitiva al cabo de 14 días. Durante ese plazo puedes cancelar la solicitud.
+                    </p>
+                    <button className="account-delete-button" disabled={accountBusy} onClick={() => void requestAccountDeletion()}>
+                      {accountBusy ? 'Procesando…' : 'Eliminar cuenta'}
+                    </button>
+                  </>
+                )}
+                {accountMessage && <p className="profile-save-message" role="status">{accountMessage}</p>}
+                {accountError && <p className="inline-error" role="alert">{accountError}</p>}
+              </section>
+
               <div className="profile-account-actions">
                 <a className="profile-orders-link" href="/"><Icon name="ticket" size={17} /> Volver a la cartelera y tus entradas</a>
                 <button className="profile-logout" onClick={handleLogout}>Cerrar sesión</button>
@@ -290,4 +355,11 @@ export default function ProfilePage({ onOpenCookieSettings, theme, onToggleTheme
       {authOpen && <AuthDialog onClose={() => setAuthOpen(false)} onLogin={handleLogin} />}
     </>
   );
+}
+
+function formatDeletionDate(value) {
+  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 }

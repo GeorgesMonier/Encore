@@ -61,14 +61,33 @@ public class AuthController {
         User user = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-        return ResponseEntity.ok(new UserResponse(user.getId(), user.getEmail(), user.getName(), user.isTotpEnabled()));
+        return ResponseEntity.ok(toUserResponse(user));
     }
 
     @PatchMapping("/me")
     public ResponseEntity<UserResponse> updateMe(@Valid @RequestBody UpdateProfileRequest request) {
         String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         User user = userService.updateName(UUID.fromString(userId), request.getName());
-        return ResponseEntity.ok(new UserResponse(user.getId(), user.getEmail(), user.getName(), user.isTotpEnabled()));
+        return ResponseEntity.ok(toUserResponse(user));
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<UserResponse> requestAccountDeletion() {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userService.requestAccountDeletion(UUID.fromString(userId));
+        return ResponseEntity.ok(toUserResponse(user));
+    }
+
+    @PostMapping("/me/cancel-deletion")
+    public ResponseEntity<UserResponse> cancelAccountDeletion() {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userService.cancelAccountDeletion(UUID.fromString(userId));
+        return ResponseEntity.ok(toUserResponse(user));
+    }
+
+    private UserResponse toUserResponse(User user) {
+        return new UserResponse(user.getId(), user.getEmail(), user.getName(), user.isTotpEnabled(),
+                user.getDeletionRequestedAt());
     }
 
     @PostMapping("/totp/setup")
