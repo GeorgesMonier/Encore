@@ -384,8 +384,6 @@ Para producción:
 - Configurar `GEMINI_API_KEY` y habilitar pgvector en PostgreSQL para el chat de soporte. Configurar Ticketmaster solo cuando se requiera catálogo real.
 - Añadir las reglas SPA del proveedor para servir `index.html` al cargar directamente `/perfil`, `/privacidad` y `/terminos`.
 
-No hay un manifiesto de despliegue específico de Render, Supabase u otro proveedor en el repositorio; los dominios, planes, políticas de red, certificados y secretos deben configurarse en el proveedor elegido. El modo demo evita cargos y no necesita las claves ni el webhook de Stripe.
-
 ## Limitaciones conocidas
 
 - El backend no verifica correos durante el registro ni implementa recuperación de contraseña por email.
