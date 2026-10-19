@@ -331,3 +331,5 @@ Para producción:
 - La sincronización vectorial de soporte usa un conjunto estático pequeño y tiene las limitaciones de contenido descritas en [Integración de IA](#integración-de-ia-y-búsqueda-semántica).
 - Hibernate actualiza el esquema automáticamente (`ddl-auto=update`); no hay un flujo de migraciones versionadas para cambios de esquema.
 - La información legal del sitio debe revisarse y completarse con los datos y políticas reales del responsable antes de producción.
+
+- Visita la web : https://encore-xpi2.onrender.com/
