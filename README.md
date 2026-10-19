@@ -216,65 +216,6 @@ Todas las rutas llevan el prefijo `/api`. Los cuerpos y respuestas son JSON salv
 
 Los prefijos de la tabla se concatenan con `/api` (por ejemplo, `/events` corresponde a `/api/events`). No hay paginación expuesta por estos controladores.
 
-### Ejemplos JSON
-
-Crear una reserva requiere sesión y CSRF. `ticketTypeId` representa un tipo existente y `idempotencyKey` debe ser un UUID nuevo para cada intento lógico:
-
-```http
-POST /api/orders
-Content-Type: application/json
-X-XSRF-TOKEN: <csrf-de-la-sesion>
-Cookie: encore_session=<cookie-httpOnly>
-```
-
-```json
-{
-  "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
-  "items": [
-    {
-      "ticketTypeId": "123e4567-e89b-12d3-a456-426614174000",
-      "quantity": 2
-    }
-  ]
-}
-```
-
-Respuesta ilustrativa `201 Created`:
-
-```json
-{
-  "id": "9d1d0f77-d48f-43a0-9c44-e3e127b9b371",
-  "status": "PENDING",
-  "totalAmount": 90.00,
-  "currency": "EUR",
-  "createdAt": "2026-01-15T12:00:00",
-  "expiresAt": "2026-01-15T12:15:00",
-  "items": [
-    {
-      "ticketTypeId": "123e4567-e89b-12d3-a456-426614174000",
-      "ticketTypeName": "General",
-      "quantity": 2,
-      "unitPrice": 45.00
-    }
-  ]
-}
-```
-
-Consulta al asistente (endpoint público, sujeto al límite de soporte):
-
-```http
-POST /api/support/ask
-Content-Type: application/json
-```
-
-```json
-{"question":"¿Cómo funciona una reserva?"}
-```
-
-Respuesta: `{"answer":"<respuesta generada a partir del contexto disponible>"}`.
-
-Para obtener CSRF en una aplicación cliente, llamar primero a `GET /api/auth/csrf` con `credentials: 'include'`; la respuesta incluye `{"token":"<token-csrf>"}`. En las mutaciones enviar dicho token en `X-XSRF-TOKEN`, el contenido JSON en el cuerpo y también `credentials: 'include'`. La API devuelve errores JSON con `status`, `error`, `message` y `timestamp`; los errores de seguridad incluyen además un `code`.
-
 ## Instalación y ejecución local
 
 ### Requisitos
@@ -292,8 +233,6 @@ Los archivos `backend/.env.example` y `frontend/.env.example` son plantillas. Co
 Copy-Item backend\.env.example backend\.env
 Copy-Item frontend\.env.example frontend\.env
 ```
-
-En `backend/.env`, definir al menos `DB_PASSWORD`, `JWT_SECRET` (valor aleatorio de al menos 32 bytes), `GEMINI_API_KEY` y los ajustes de cookies/CORS para desarrollo. Se recomienda `PAYMENTS_DEMO_MODE=true`, `AUTH_COOKIE_SECURE=false`, `AUTH_COOKIE_SAME_SITE=Lax` y `CORS_ALLOWED_ORIGINS=http://localhost:5173` al trabajar por HTTP local. La sincronización Ticketmaster está desactivada por defecto; si se activa, configurar `TICKETMASTER_API_KEY`. Dejar `STRIPE_API_KEY` sin configurar conserva el modo demo.
 
 En `frontend/.env`, usar `VITE_API_BASE_URL=/api` para desarrollo local. Vite reenvía `/api` a `http://localhost:8080`. No colocar secretos en variables `VITE_*`.
 
